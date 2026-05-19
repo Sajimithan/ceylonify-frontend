@@ -1,0 +1,13 @@
+{
+  "name": "ceylonify-frontend",
+  "private": true,
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {
+    "format": "prettier -w .",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0",
+    "prettier": "^3.0.0"
+  }
+}

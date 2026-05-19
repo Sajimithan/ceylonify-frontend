@@ -1,0 +1,64 @@
+import { gql } from "@apollo/client";
+
+export const MY_LISTINGS = gql`
+  query MyListings {
+    myListings {
+      id
+      title
+      description
+      type
+      status
+      createdAt
+      rejectionReason
+      imageUrl
+    }
+  }
+`;
+
+export const GET_LISTING = gql`
+  query GetListing($id: String!) {
+    listing(id: $id) {
+      id
+      title
+      description
+      type
+      category
+      price
+      startDateTime
+      placeName
+      mapLink
+      imageUrl
+      status
+      createdAt
+    }
+  }
+`;
+
+export const CREATE_LISTING = gql`
+  mutation CreateListing($input: CreateListingInput!) {
+    createListing(input: $input) {
+      id
+      title
+      status
+      createdAt
+    }
+  }
+`;
+
+export const UPDATE_LISTING = gql`
+  mutation UpdateListing($id: String!, $input: UpdateListingInput!) {
+    updateListing(id: $id, input: $input) {
+      id
+      title
+      status
+    }
+  }
+`;
+
+export const DELETE_LISTING = gql`
+  mutation DeleteListing($id: String!) {
+    deleteListing(id: $id) {
+      id
+    }
+  }
+`;

@@ -1,0 +1,7 @@
+node_modules/
+dist/
+build/
+.expo/
+*.env
+!.env.example
+.DS_Store
