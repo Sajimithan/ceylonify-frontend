@@ -2,7 +2,7 @@ import { createBrowserRouter } from "react-router-dom";
 import { Landing } from "../pages/Landing";
 import { Login } from "../pages/Login";
 import { Register } from "../pages/Register";
-import { ProtectedRoute } from "../auth/ProtectedRoute";
+import { RequireHost } from "../auth/RequireHost";
 import { RequireAdmin } from "../auth/RequireAdmin";
 
 // Host pages
@@ -11,8 +11,9 @@ import { CreateListing } from "../pages/host/CreateListing";
 import { EditListing } from "../pages/host/EditListing";
 import { SavedListings } from "../pages/host/SavedListings";
 import { HostAnalytics } from "../pages/host/HostAnalytics";
+import { HostProfile } from "../pages/host/HostProfile";
 
-// Traveler / Browse
+// Browse / detail
 import { Browse } from "../pages/Browse";
 import { ListingDetail } from "../pages/ListingDetail";
 
@@ -30,111 +31,63 @@ export const router = createBrowserRouter([
   { path: "/login", element: <Login /> },
   { path: "/register", element: <Register /> },
 
-  // Protected — host dashboard
+  // HOST + ADMIN only
   {
     path: "/dashboard",
-    element: (
-      <ProtectedRoute>
-        <MyListings />
-      </ProtectedRoute>
-    ),
+    element: <RequireHost><MyListings /></RequireHost>,
   },
   {
     path: "/browse",
-    element: (
-      <ProtectedRoute>
-        <Browse />
-      </ProtectedRoute>
-    ),
+    element: <RequireHost><Browse /></RequireHost>,
   },
   {
     path: "/listing/:id",
-    element: (
-      <ProtectedRoute>
-        <ListingDetail />
-      </ProtectedRoute>
-    ),
+    element: <RequireHost><ListingDetail /></RequireHost>,
   },
   {
     path: "/saved",
-    element: (
-      <ProtectedRoute>
-        <SavedListings />
-      </ProtectedRoute>
-    ),
+    element: <RequireHost><SavedListings /></RequireHost>,
   },
   {
     path: "/host/create",
-    element: (
-      <ProtectedRoute>
-        <CreateListing />
-      </ProtectedRoute>
-    ),
+    element: <RequireHost><CreateListing /></RequireHost>,
   },
   {
     path: "/host/edit/:id",
-    element: (
-      <ProtectedRoute>
-        <EditListing />
-      </ProtectedRoute>
-    ),
+    element: <RequireHost><EditListing /></RequireHost>,
   },
   {
     path: "/host/analytics",
-    element: (
-      <ProtectedRoute>
-        <HostAnalytics />
-      </ProtectedRoute>
-    ),
+    element: <RequireHost><HostAnalytics /></RequireHost>,
+  },
+  {
+    path: "/host/profile",
+    element: <RequireHost><HostProfile /></RequireHost>,
   },
 
-  // Admin routes
+  // ADMIN only
   {
     path: "/admin",
-    element: (
-      <RequireAdmin>
-        <AdminOverview />
-      </RequireAdmin>
-    ),
+    element: <RequireAdmin><AdminOverview /></RequireAdmin>,
   },
   {
     path: "/admin/pending",
-    element: (
-      <RequireAdmin>
-        <AdminPendingListings />
-      </RequireAdmin>
-    ),
+    element: <RequireAdmin><AdminPendingListings /></RequireAdmin>,
   },
   {
     path: "/admin/listings",
-    element: (
-      <RequireAdmin>
-        <AdminAllListings />
-      </RequireAdmin>
-    ),
+    element: <RequireAdmin><AdminAllListings /></RequireAdmin>,
   },
   {
     path: "/admin/users",
-    element: (
-      <RequireAdmin>
-        <AdminUsers />
-      </RequireAdmin>
-    ),
+    element: <RequireAdmin><AdminUsers /></RequireAdmin>,
   },
   {
     path: "/admin/reports",
-    element: (
-      <RequireAdmin>
-        <AdminReports />
-      </RequireAdmin>
-    ),
+    element: <RequireAdmin><AdminReports /></RequireAdmin>,
   },
   {
     path: "/admin/audit-logs",
-    element: (
-      <RequireAdmin>
-        <AdminAuditLogs />
-      </RequireAdmin>
-    ),
+    element: <RequireAdmin><AdminAuditLogs /></RequireAdmin>,
   },
 ]);

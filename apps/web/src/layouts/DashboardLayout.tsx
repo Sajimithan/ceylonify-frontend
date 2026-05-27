@@ -49,7 +49,7 @@ export function DashboardLayout({
         <div className="px-6 py-5">
           <Link
             className="md:block text-left text-slate-600 inline-block whitespace-nowrap text-sm uppercase font-bold"
-            to="/"
+            to="/dashboard"
           >
             Ceylonify
             <div className="text-[10px] text-slate-400 normal-case mt-1 font-semibold tracking-wider">
@@ -78,6 +78,7 @@ export function DashboardLayout({
             <NavLink to="/dashboard">My Listings</NavLink>
             <NavLink to="/host/create">Create Listing</NavLink>
             <NavLink to="/host/analytics">Analytics</NavLink>
+            {!isAdmin && <NavLink to="/host/profile">Profile & Settings</NavLink>}
           </ul>
 
           {isAdmin && (
@@ -93,6 +94,7 @@ export function DashboardLayout({
                 <NavLink to="/admin/users">User Management</NavLink>
                 <NavLink to="/admin/reports">Reports</NavLink>
                 <NavLink to="/admin/audit-logs">Audit Logs</NavLink>
+                <NavLink to="/host/profile">Profile & Settings</NavLink>
               </ul>
             </>
           )}
