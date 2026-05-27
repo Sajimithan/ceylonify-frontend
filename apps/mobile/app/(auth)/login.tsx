@@ -85,7 +85,7 @@ export default function LoginScreen() {
 
           <View style={styles.form}>
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email Address</Text>
+              <Text style={[styles.label, { marginBottom: 8 }]}>Email Address</Text>
               <View style={styles.inputContainer}>
                 <Mail size={20} color="#667085" />
                 <TextInput
@@ -101,7 +101,12 @@ export default function LoginScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Password</Text>
+              <View style={styles.passwordLabelRow}>
+                <Text style={styles.label}>Password</Text>
+                <TouchableOpacity onPress={() => router.push('/(auth)/forgot-password')}>
+                  <Text style={styles.forgotLink}>Forgot password?</Text>
+                </TouchableOpacity>
+              </View>
               <View style={styles.inputContainer}>
                 <Lock size={20} color="#667085" />
                 <TextInput
@@ -155,7 +160,9 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 16, color: '#667085', lineHeight: 24 },
   form: {},
   inputGroup: { marginBottom: 24 },
-  label: { fontSize: 14, fontWeight: 'bold', color: '#0B1220', marginBottom: 8, marginLeft: 4 },
+  passwordLabelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  label: { fontSize: 14, fontWeight: 'bold', color: '#0B1220', marginLeft: 4 },
+  forgotLink: { fontSize: 12, fontWeight: 'bold', color: '#0EA5A4' },
   inputContainer: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#F7FAFC', borderWidth: 1, borderColor: '#E5E7EB',

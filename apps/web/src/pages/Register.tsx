@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { createUserWithEmailAndPassword } from "firebase/auth";
+import { createUserWithEmailAndPassword, sendEmailVerification } from "firebase/auth";
 import { auth } from "../auth/firebase";
 import { Link } from "react-router-dom";
 import { Input } from "../ui/Input";
@@ -31,7 +31,8 @@ export function Register() {
 
     setLoading(true);
     try {
-      await createUserWithEmailAndPassword(auth, email.trim(), password);
+      const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+      await sendEmailVerification(credential.user).catch(() => {});
       // Both roles create a TRAVELER account by default.
       // HOST access requires admin approval — shown in host-pending screen.
       setStep(role === "HOST" ? "host-pending" : "traveler-success");
@@ -63,7 +64,7 @@ export function Register() {
             Welcome to Ceylonify! Your Traveler account has been created
             successfully.
           </p>
-          <div className="rounded-xl bg-sky-50 border border-sky-100 px-5 py-4 mb-6 text-left">
+          <div className="rounded-xl bg-sky-50 border border-sky-100 px-5 py-4 mb-3 text-left">
             <div className="text-xs font-bold uppercase text-sky-600 mb-1">
               Next step
             </div>
@@ -71,6 +72,14 @@ export function Register() {
               Download the <span className="font-bold">Ceylonify mobile app</span> to
               discover and book authentic Sri Lankan experiences. Sign in using
               your registered email and password.
+            </p>
+          </div>
+          <div className="rounded-xl bg-emerald-50 border border-emerald-100 px-5 py-3 mb-6 text-left">
+            <div className="text-xs font-bold uppercase text-emerald-600 mb-1">
+              Verify your email
+            </div>
+            <p className="text-sm text-emerald-800 leading-relaxed">
+              We sent a verification link to <span className="font-semibold">{email}</span>. Check your inbox and click the link to verify your account.
             </p>
           </div>
           <div className="space-y-2">
@@ -114,7 +123,7 @@ export function Register() {
             Your account has been registered with the email{" "}
             <span className="font-semibold text-slate-600">{email}</span>.
           </p>
-          <div className="rounded-xl bg-amber-50 border border-amber-100 px-5 py-4 mb-6 text-left">
+          <div className="rounded-xl bg-amber-50 border border-amber-100 px-5 py-4 mb-3 text-left">
             <div className="text-xs font-bold uppercase text-amber-600 mb-1">
               Host Access Pending
             </div>
@@ -122,6 +131,14 @@ export function Register() {
               Host dashboard access requires admin approval. Please contact a
               Ceylonify administrator to upgrade your account to Host status.
               Once approved, you can sign in at the link below.
+            </p>
+          </div>
+          <div className="rounded-xl bg-emerald-50 border border-emerald-100 px-5 py-3 mb-6 text-left">
+            <div className="text-xs font-bold uppercase text-emerald-600 mb-1">
+              Verify your email
+            </div>
+            <p className="text-sm text-emerald-800 leading-relaxed">
+              We sent a verification link to <span className="font-semibold">{email}</span>. Check your inbox and click the link to verify your account.
             </p>
           </div>
           <Link

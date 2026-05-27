@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { Mail, Lock, ChevronLeft, User } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification } from 'firebase/auth';
 import { auth } from '../../src/lib/firebase';
 
 export default function RegisterScreen() {
@@ -34,7 +34,8 @@ export default function RegisterScreen() {
     try {
       const credential = await createUserWithEmailAndPassword(auth!, email.trim(), password);
       await updateProfile(credential.user, { displayName: name.trim() });
-      router.replace('/(tabs)/home');
+      await sendEmailVerification(credential.user).catch(() => {});
+      router.replace({ pathname: '/(auth)/verify-email', params: { email: email.trim() } });
     } catch (e: any) {
       const code: string = e?.code ?? '';
       if (code === 'auth/email-already-in-use') {

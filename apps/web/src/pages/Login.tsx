@@ -61,13 +61,23 @@ export function Login() {
             onChange={(e) => setEmail(e.target.value)}
             autoComplete="email"
           />
-          <Input
-            label="Password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-          />
+          <div>
+            <Input
+              label="Password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+            />
+            <div className="text-right mt-1">
+              <Link
+                to="/forgot-password"
+                className="text-xs font-semibold text-sky-600 hover:underline"
+              >
+                Forgot password?
+              </Link>
+            </div>
+          </div>
 
           {err ? (
             <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">

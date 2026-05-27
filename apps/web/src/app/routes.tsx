@@ -24,12 +24,14 @@ import { AdminUsers } from "../pages/admin/AdminUsers";
 import { AdminAllListings } from "../pages/admin/AdminAllListings";
 import { AdminReports } from "../pages/admin/AdminReports";
 import { AdminAuditLogs } from "../pages/admin/AdminAuditLogs";
+import { ForgotPassword } from "../pages/ForgotPassword";
 
 export const router = createBrowserRouter([
   // Public
   { path: "/", element: <Landing /> },
   { path: "/login", element: <Login /> },
   { path: "/register", element: <Register /> },
+  { path: "/forgot-password", element: <ForgotPassword /> },
 
   // HOST + ADMIN only
   {
