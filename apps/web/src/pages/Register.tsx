@@ -1,27 +1,38 @@
 import { useState } from "react";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { createUserWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../auth/firebase";
 import { useNavigate, Link } from "react-router-dom";
 import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
 
-export function Login() {
+export function Register() {
   const nav = useNavigate();
-  const [email, setEmail] = useState("host@test.com");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
+
+    if (password !== confirm) {
+      setErr("Passwords do not match");
+      return;
+    }
+    if (password.length < 6) {
+      setErr("Password must be at least 6 characters");
+      return;
+    }
+
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email.trim(), password);
+      await createUserWithEmailAndPassword(auth, email.trim(), password);
       nav("/dashboard", { replace: true });
     } catch (e: unknown) {
       const error = e as Error;
-      setErr(error?.message ?? "Login failed");
+      setErr(error?.message ?? "Registration failed");
     } finally {
       setLoading(false);
     }
@@ -36,22 +47,19 @@ export function Login() {
         backgroundPosition: "center",
       }}
     >
-      {/* Full-screen dark overlay */}
       <div className="absolute inset-0 bg-black/50" />
 
-      {/* Branding — top left */}
       <div className="absolute left-8 top-8 z-10 text-white">
         <Link to="/" className="text-2xl font-bold tracking-tight drop-shadow hover:opacity-80 transition-opacity">
           Ceylonify
         </Link>
-        <div className="text-sm text-white/60">Host & Admin Dashboard</div>
+        <div className="text-sm text-white/60">Create your account</div>
       </div>
 
-      {/* Centered login card */}
       <div className="relative z-10 w-full max-w-md rounded-2xl bg-white/95 p-10 shadow-2xl backdrop-blur-sm">
-        <h1 className="text-2xl font-semibold text-neutral-900">Welcome back</h1>
+        <h1 className="text-2xl font-semibold text-neutral-900">Create account</h1>
         <p className="mt-1 text-sm text-neutral-500">
-          Sign in to manage your listings
+          Start discovering or hosting Sri Lankan experiences
         </p>
 
         <form onSubmit={onSubmit} className="mt-8 space-y-5">
@@ -66,7 +74,14 @@ export function Login() {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
+            autoComplete="new-password"
+          />
+          <Input
+            label="Confirm Password"
+            type="password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            autoComplete="new-password"
           />
 
           {err ? (
@@ -76,24 +91,22 @@ export function Login() {
           ) : null}
 
           <Button type="submit" disabled={loading} className="w-full">
-            {loading ? "Signing in…" : "Sign in"}
+            {loading ? "Creating account…" : "Create account"}
           </Button>
         </form>
 
         <p className="mt-6 text-center text-xs text-neutral-400">
-          Don't have an account?{" "}
-          <Link to="/register" className="font-bold text-sky-600 hover:underline">
-            Create one
+          Already have an account?{" "}
+          <Link to="/login" className="font-bold text-sky-600 hover:underline">
+            Sign in
           </Link>
         </p>
 
-        <div className="mt-4 space-y-1 text-xs text-neutral-400">
-          <p>Host: any registered Firebase user</p>
-          <p>Admin: <span className="font-mono">admin@test.com</span></p>
+        <div className="mt-4 rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-700">
+          New accounts start as Travelers. Contact an admin to upgrade to Host access.
         </div>
       </div>
 
-      {/* Footer */}
       <div className="absolute bottom-6 z-10 text-xs text-white/40">
         © {new Date().getFullYear()} Ceylonify · Index 220596H
       </div>

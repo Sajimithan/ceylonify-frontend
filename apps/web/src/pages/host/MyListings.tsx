@@ -18,6 +18,8 @@ type Listing = {
   createdAt: string;
   rejectionReason?: string;
   imageUrl?: string;
+  isPremium?: boolean;
+  viewCount?: number;
 };
 
 interface MyListingsData {
@@ -110,7 +112,14 @@ export function MyListings() {
               <div className="flex items-start justify-between gap-3 mb-2">
                 <div>
                   <h6 className="text-lg font-bold text-slate-700 capitalize">{l.title}</h6>
-                  <div className="mt-1 text-xs font-bold uppercase text-slate-400">{l.type}</div>
+                  <div className="mt-1 flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase text-slate-400">{l.type}</span>
+                    {l.isPremium && (
+                      <span className="text-[9px] font-bold uppercase bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded-full">
+                        Premium
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <Badge value={l.status} />
               </div>
@@ -134,16 +143,28 @@ export function MyListings() {
               )}
 
               <div className="mt-auto pt-4 border-t border-slate-200 flex items-center justify-between">
-                <div className="text-xs font-semibold text-slate-400">
-                  {new Date(l.createdAt).toLocaleDateString()}
+                <div>
+                  <div className="text-xs font-semibold text-slate-400">
+                    {new Date(l.createdAt).toLocaleDateString()}
+                  </div>
+                  {typeof l.viewCount === 'number' && (
+                    <div className="text-xs text-slate-400 mt-0.5">
+                      {l.viewCount} view{l.viewCount !== 1 ? 's' : ''}
+                    </div>
+                  )}
                 </div>
                 <div className="flex gap-2">
+                  {l.status === 'APPROVED' && (
+                    <Link to={`/listing/${l.id}`}>
+                      <Button variant="ghost" className="!px-3 !py-1 !text-[10px] text-emerald-600">View</Button>
+                    </Link>
+                  )}
                   <Link to={`/host/edit/${l.id}`}>
                     <Button variant="ghost" className="!px-3 !py-1 !text-[10px] text-sky-600">Edit</Button>
                   </Link>
-                  <Button 
-                    variant="danger" 
-                    className="!px-3 !py-1 !text-[10px]" 
+                  <Button
+                    variant="danger"
+                    className="!px-3 !py-1 !text-[10px]"
                     onClick={() => handleDelete(l.id)}
                   >
                     Delete

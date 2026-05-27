@@ -1,6 +1,13 @@
 import { useState, useEffect } from "react";
+import { gql } from "@apollo/client";
 import { useMutation, useQuery } from "@apollo/client/react";
 import { GET_LISTING, UPDATE_LISTING } from "./listings.gql";
+
+const ENHANCE_DESCRIPTION = gql`
+  mutation EnhanceDescriptionEdit($text: String!) {
+    enhanceDescription(text: $text)
+  }
+`;
 import { Input } from "../../ui/Input";
 import { Button } from "../../ui/Button";
 import { Card } from "../../ui/Card";
@@ -38,8 +45,20 @@ export function EditListing() {
   const [err, setErr] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [uploading, setUploading] = useState(false);
-  
+  const [aiApplied, setAiApplied] = useState(false);
+
   const [updateListing, { loading }] = useMutation(UPDATE_LISTING);
+  const [enhance, { loading: enhancing }] = useMutation(ENHANCE_DESCRIPTION);
+
+  async function handleEnhance() {
+    if (!description.trim()) return;
+    setAiApplied(false);
+    const { data } = await enhance({ variables: { text: description } });
+    if (data?.enhanceDescription) {
+      setDescription(data.enhanceDescription);
+      setAiApplied(true);
+    }
+  }
 
   // Prepopulate state
   useEffect(() => {
@@ -113,7 +132,7 @@ export function EditListing() {
         },
       });
       setSuccess(true);
-      setTimeout(() => nav("/", { replace: true }), 800);
+      setTimeout(() => nav("/dashboard", { replace: true }), 800);
     } catch (e: unknown) {
       setUploading(false);
       const error = e as Error;
@@ -136,7 +155,7 @@ export function EditListing() {
       title="Edit Listing"
       subtitle="Update your experience details"
       actions={
-        <Button variant="ghost" onClick={() => nav("/")}>
+        <Button variant="ghost" onClick={() => nav("/dashboard")}>
           ← Back
         </Button>
       }
@@ -205,9 +224,22 @@ export function EditListing() {
                   placeholder="Describe the experience in detail..."
                   maxLength={1200}
                 />
-                <div className="mt-1 text-right text-xs font-semibold text-slate-400">
-                  {description.length}/1200
+                <div className="mt-1 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={handleEnhance}
+                    disabled={enhancing || !description.trim()}
+                    className="text-xs font-bold text-violet-600 hover:text-violet-800 disabled:opacity-40 transition-colors"
+                  >
+                    {enhancing ? "Enhancing…" : "✨ Enhance with AI"}
+                  </button>
+                  <span className="text-xs font-semibold text-slate-400">{description.length}/1200</span>
                 </div>
+                {aiApplied && (
+                  <p className="mt-1 text-xs text-violet-500 font-semibold">
+                    AI suggestion applied — edit freely.
+                  </p>
+                )}
               </label>
 
               <div className="grid gap-4 sm:grid-cols-2">

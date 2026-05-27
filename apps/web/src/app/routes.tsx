@@ -1,24 +1,65 @@
 import { createBrowserRouter } from "react-router-dom";
+import { Landing } from "../pages/Landing";
 import { Login } from "../pages/Login";
+import { Register } from "../pages/Register";
 import { ProtectedRoute } from "../auth/ProtectedRoute";
 import { RequireAdmin } from "../auth/RequireAdmin";
+
+// Host pages
 import { MyListings } from "../pages/host/MyListings";
 import { CreateListing } from "../pages/host/CreateListing";
 import { EditListing } from "../pages/host/EditListing";
+import { SavedListings } from "../pages/host/SavedListings";
+import { HostAnalytics } from "../pages/host/HostAnalytics";
+
+// Traveler / Browse
+import { Browse } from "../pages/Browse";
+import { ListingDetail } from "../pages/ListingDetail";
+
+// Admin pages
 import { AdminPendingListings } from "../pages/admin/AdminPendingListings";
 import { AdminOverview } from "../pages/admin/AdminOverview";
 import { AdminUsers } from "../pages/admin/AdminUsers";
 import { AdminAllListings } from "../pages/admin/AdminAllListings";
+import { AdminReports } from "../pages/admin/AdminReports";
+import { AdminAuditLogs } from "../pages/admin/AdminAuditLogs";
 
 export const router = createBrowserRouter([
+  // Public
+  { path: "/", element: <Landing /> },
   { path: "/login", element: <Login /> },
+  { path: "/register", element: <Register /> },
 
-  // Host routes
+  // Protected — host dashboard
   {
-    path: "/",
+    path: "/dashboard",
     element: (
       <ProtectedRoute>
         <MyListings />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/browse",
+    element: (
+      <ProtectedRoute>
+        <Browse />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/listing/:id",
+    element: (
+      <ProtectedRoute>
+        <ListingDetail />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/saved",
+    element: (
+      <ProtectedRoute>
+        <SavedListings />
       </ProtectedRoute>
     ),
   },
@@ -38,8 +79,16 @@ export const router = createBrowserRouter([
       </ProtectedRoute>
     ),
   },
+  {
+    path: "/host/analytics",
+    element: (
+      <ProtectedRoute>
+        <HostAnalytics />
+      </ProtectedRoute>
+    ),
+  },
 
-  // Admin routes — require authenticated admin email
+  // Admin routes
   {
     path: "/admin",
     element: (
@@ -57,6 +106,14 @@ export const router = createBrowserRouter([
     ),
   },
   {
+    path: "/admin/listings",
+    element: (
+      <RequireAdmin>
+        <AdminAllListings />
+      </RequireAdmin>
+    ),
+  },
+  {
     path: "/admin/users",
     element: (
       <RequireAdmin>
@@ -65,12 +122,19 @@ export const router = createBrowserRouter([
     ),
   },
   {
-    path: "/admin/listings",
+    path: "/admin/reports",
     element: (
       <RequireAdmin>
-        <AdminAllListings />
+        <AdminReports />
+      </RequireAdmin>
+    ),
+  },
+  {
+    path: "/admin/audit-logs",
+    element: (
+      <RequireAdmin>
+        <AdminAuditLogs />
       </RequireAdmin>
     ),
   },
 ]);
-

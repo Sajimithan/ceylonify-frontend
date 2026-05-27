@@ -1,5 +1,4 @@
 import { Link, useLocation } from "react-router-dom";
-
 import { auth } from "../auth/firebase";
 import { signOut } from "firebase/auth";
 import { useAuth } from "../auth/useAuth";
@@ -7,7 +6,7 @@ import { isAdminEmail } from "../auth/admin";
 
 function NavLink({ to, children }: { to: string; children: React.ReactNode }) {
   const { pathname } = useLocation();
-  const active = pathname === to;
+  const active = pathname === to || (to !== "/dashboard" && pathname.startsWith(to));
   return (
     <li className="items-center">
       <Link
@@ -59,14 +58,26 @@ export function DashboardLayout({
           </Link>
         </div>
 
-        <div className="flex-1 px-6">
+        <div className="flex-1 px-6 overflow-y-auto">
+          {/* Discover */}
+          <hr className="my-4 border-slate-200" />
+          <h6 className="text-slate-500 text-xs uppercase font-bold block pt-1 pb-4 no-underline">
+            Discover
+          </h6>
+          <ul className="flex flex-col list-none">
+            <NavLink to="/browse">Browse Experiences</NavLink>
+            <NavLink to="/saved">Saved Listings</NavLink>
+          </ul>
+
+          {/* Host */}
           <hr className="my-4 border-slate-200" />
           <h6 className="text-slate-500 text-xs uppercase font-bold block pt-1 pb-4 no-underline">
             Host
           </h6>
           <ul className="flex flex-col list-none">
-            <NavLink to="/">My Listings</NavLink>
+            <NavLink to="/dashboard">My Listings</NavLink>
             <NavLink to="/host/create">Create Listing</NavLink>
+            <NavLink to="/host/analytics">Analytics</NavLink>
           </ul>
 
           {isAdmin && (
@@ -80,6 +91,8 @@ export function DashboardLayout({
                 <NavLink to="/admin/pending">Pending Moderation</NavLink>
                 <NavLink to="/admin/listings">All Listings</NavLink>
                 <NavLink to="/admin/users">User Management</NavLink>
+                <NavLink to="/admin/reports">Reports</NavLink>
+                <NavLink to="/admin/audit-logs">Audit Logs</NavLink>
               </ul>
             </>
           )}
@@ -96,14 +109,16 @@ export function DashboardLayout({
 
       {/* Main Content Wrapper */}
       <div className="flex-1 overflow-auto relative bg-slate-100 flex flex-col">
-        {/* Navbar / Header overlap background */}
+        {/* Header */}
         <div className="relative bg-sky-600 pb-32 pt-12 md:pt-16 w-full flex-shrink-0 shadow-lg">
           <div className="px-4 md:px-10 mx-auto w-full">
             <div className="flex justify-between items-center text-white mb-4">
               <div>
                 <h1 className="text-white text-2xl font-semibold">{title}</h1>
                 {subtitle && (
-                  <p className="text-white/80 text-sm mt-1 font-light tracking-wide">{subtitle}</p>
+                  <p className="text-white/80 text-sm mt-1 font-light tracking-wide">
+                    {subtitle}
+                  </p>
                 )}
               </div>
               <div>{actions}</div>
@@ -111,10 +126,10 @@ export function DashboardLayout({
           </div>
         </div>
 
-        {/* Page content overlapping header */}
+        {/* Page content */}
         <div className="px-4 md:px-10 mx-auto w-full -mt-24 relative z-10 flex-1 flex flex-col">
           {children}
-          
+
           <footer className="block pt-8 pb-4 mt-auto">
             <div className="container mx-auto px-4">
               <hr className="mb-4 border-b-1 border-slate-200" />
