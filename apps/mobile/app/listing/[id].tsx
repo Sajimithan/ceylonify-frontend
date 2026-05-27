@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, Image, TouchableOpacity,
-  ActivityIndicator, Linking, StyleSheet
+  ActivityIndicator, Linking, StyleSheet,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ChevronLeft, Share2, Heart, MapPin, Clock, Tag, Navigation } from 'lucide-react-native';
-import { useGraphQL } from '../../src/hooks/useGraphQL';
+import { ChevronLeft, Share2, Heart, MapPin, Clock, Tag, Navigation, Cloud } from 'lucide-react-native';
+import { useGraphQL, gqlFetch } from '../../src/hooks/useGraphQL';
 
-const API_BASE = (process.env.EXPO_PUBLIC_API_URL ?? 'http://10.0.2.2:3000/graphql')
-  .replace('/graphql', '');
+const API_BASE = (process.env.EXPO_PUBLIC_API_URL ?? 'http://10.0.2.2:3000/graphql').replace('/graphql', '');
+const WEATHER_KEY = process.env.EXPO_PUBLIC_WEATHER_API_KEY;
 
 function fixImageUrl(url?: string | null): string | null {
   if (!url) return null;
@@ -18,40 +18,117 @@ function fixImageUrl(url?: string | null): string | null {
 const GET_LISTING_QUERY = `
   query GetListing($id: String!) {
     listing(id: $id) {
-      id
-      title
-      description
-      type
-      category
-      price
-      status
-      placeName
-      mapLink
-      imageUrl
-      createdAt
-      lat
-      lng
+      id title description type category price startDateTime
+      status placeName mapLink imageUrl isPremium viewCount
+      createdAt lat lng
     }
   }
 `;
 
+const SAVED_LISTINGS_QUERY = `query SavedListings { savedListings { id } }`;
+const SAVE_MUTATION = `mutation SaveListing($listingId: ID!) { saveListing(listingId: $listingId) }`;
+const UNSAVE_MUTATION = `mutation UnsaveListing($listingId: ID!) { unsaveListing(listingId: $listingId) }`;
+
+interface WeatherData {
+  temp: number;
+  description: string;
+  icon: string;
+}
+
+function WeatherWidget({ lat, lng }: { lat: number; lng: number }) {
+  const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!WEATHER_KEY || lat === 0 || lng === 0) { setLoading(false); return; }
+    fetch(
+      `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&units=metric&appid=${WEATHER_KEY}`,
+    )
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.main) {
+          setWeather({
+            temp: Math.round(d.main.temp),
+            description: d.weather[0]?.description ?? '',
+            icon: d.weather[0]?.main ?? '',
+          });
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [lat, lng]);
+
+  if (!WEATHER_KEY || lat === 0 || lng === 0) return null;
+  if (loading) return null;
+  if (!weather) return null;
+
+  const emoji = weather.icon === 'Clear' ? '☀️'
+    : weather.icon === 'Clouds' ? '☁️'
+    : weather.icon === 'Rain' ? '🌧️'
+    : weather.icon === 'Thunderstorm' ? '⛈️'
+    : weather.icon === 'Snow' ? '❄️'
+    : '🌤️';
+
+  return (
+    <View style={weatherStyles.container}>
+      <Cloud size={16} color="#0EA5A4" />
+      <Text style={weatherStyles.text}>
+        {emoji} {weather.temp}°C — {weather.description}
+      </Text>
+    </View>
+  );
+}
+
+const weatherStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#E0F6F6', borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 8, gap: 8, marginBottom: 10,
+  },
+  text: { fontSize: 13, color: '#0B7A79', fontWeight: '600' },
+});
+
 export default function ListingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const [saved, setSaved] = useState(false);
+  const [saveLoading, setSaveLoading] = useState(false);
 
-  const { data, loading, error } = useGraphQL<{ listing: any }>(
-    GET_LISTING_QUERY,
-    { id },
-  );
+  const { data, loading, error } = useGraphQL<{ listing: any }>(GET_LISTING_QUERY, { id });
+  const { data: savedData } = useGraphQL<{ savedListings: { id: string }[] }>(SAVED_LISTINGS_QUERY);
+
+  useEffect(() => {
+    if (savedData?.savedListings && id) {
+      setSaved(savedData.savedListings.some((s) => s.id === id));
+    }
+  }, [savedData, id]);
 
   const listing = data?.listing;
 
+  async function toggleSave() {
+    if (!listing || saveLoading) return;
+    setSaveLoading(true);
+    try {
+      if (saved) {
+        await gqlFetch(UNSAVE_MUTATION, { listingId: listing.id });
+        setSaved(false);
+      } else {
+        await gqlFetch(SAVE_MUTATION, { listingId: listing.id });
+        setSaved(true);
+      }
+    } catch {
+      // silent
+    } finally {
+      setSaveLoading(false);
+    }
+  }
+
   const openInMaps = () => {
     if (!listing) return;
-    if (listing.mapLink) {
+    if (listing.lat && listing.lng && listing.lat !== 0 && listing.lng !== 0) {
+      Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${listing.lat},${listing.lng}`);
+    } else if (listing.mapLink) {
       Linking.openURL(listing.mapLink);
-    } else if (listing.lat && listing.lng) {
-      Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${listing.lat},${listing.lng}`);
     }
   };
 
@@ -67,7 +144,7 @@ export default function ListingDetailScreen() {
   if (error || !listing) {
     return (
       <View style={styles.errorContainer}>
-        <Text style={styles.errorTitle}>⚠️ Not Found</Text>
+        <Text style={styles.errorTitle}>Not Found</Text>
         <Text style={styles.errorMessage}>{error?.message ?? 'This listing could not be loaded.'}</Text>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Text style={styles.backButtonText}>← Go Back</Text>
@@ -77,7 +154,7 @@ export default function ListingDetailScreen() {
   }
 
   const imageUrl = fixImageUrl(listing.imageUrl);
-  const hasLocation = (listing.lat && listing.lng) || listing.mapLink;
+  const hasLocation = (listing.lat && listing.lng && listing.lat !== 0) || listing.mapLink;
 
   return (
     <View style={styles.container}>
@@ -92,7 +169,6 @@ export default function ListingDetailScreen() {
             </View>
           )}
 
-          {/* Back & Share Buttons */}
           <View style={styles.imageOverlayButtons}>
             <TouchableOpacity onPress={() => router.back()} style={styles.circleButton}>
               <ChevronLeft size={22} color="#0B1220" />
@@ -101,27 +177,35 @@ export default function ListingDetailScreen() {
               <TouchableOpacity style={styles.circleButton}>
                 <Share2 size={20} color="#0B1220" />
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.circleButton, { marginLeft: 10 }]}>
-                <Heart size={20} color="#0B1220" />
+              <TouchableOpacity
+                onPress={toggleSave}
+                disabled={saveLoading}
+                style={[styles.circleButton, { marginLeft: 10 }]}
+              >
+                {saveLoading
+                  ? <ActivityIndicator size="small" color="#EF4444" />
+                  : <Heart size={20} color={saved ? '#EF4444' : '#0B1220'} fill={saved ? '#EF4444' : 'none'} />
+                }
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* Type Badge on image */}
           <View style={styles.typeBadge}>
             <Text style={styles.typeBadgeText}>{listing.type}</Text>
           </View>
+
+          {listing.isPremium && (
+            <View style={styles.premiumBadge}>
+              <Text style={styles.premiumBadgeText}>PREMIUM</Text>
+            </View>
+          )}
         </View>
 
-        {/* Content Card */}
+        {/* Content */}
         <View style={styles.contentCard}>
-          {/* Category + Title */}
-          {listing.category && (
-            <Text style={styles.categoryLabel}>{listing.category}</Text>
-          )}
+          {listing.category && <Text style={styles.categoryLabel}>{listing.category}</Text>}
           <Text style={styles.title}>{listing.title}</Text>
 
-          {/* Location */}
           {listing.placeName && (
             <View style={styles.infoRow}>
               <MapPin size={15} color="#0EA5A4" />
@@ -129,36 +213,40 @@ export default function ListingDetailScreen() {
             </View>
           )}
 
-          {/* Date / Created At */}
-          <View style={styles.infoRow}>
-            <Clock size={15} color="#0EA5A4" />
-            <Text style={styles.infoText}>
-              Listed {new Date(listing.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-            </Text>
-          </View>
+          {listing.startDateTime && (
+            <View style={styles.infoRow}>
+              <Clock size={15} color="#0EA5A4" />
+              <Text style={styles.infoText}>
+                {new Date(listing.startDateTime).toLocaleDateString('en-US', {
+                  weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
+                })}
+              </Text>
+            </View>
+          )}
 
-          {/* Price */}
-          {listing.price && (
+          {listing.price ? (
             <View style={styles.infoRow}>
               <Tag size={15} color="#0EA5A4" />
               <Text style={[styles.infoText, { fontWeight: 'bold', color: '#0EA5A4' }]}>
                 LKR {listing.price}
               </Text>
             </View>
-          )}
+          ) : null}
 
-          {/* Divider */}
           <View style={styles.divider} />
 
-          {/* Description */}
           <Text style={styles.sectionTitle}>About this Experience</Text>
           <Text style={styles.description}>{listing.description}</Text>
 
-          {/* Map Preview / Directions */}
           {hasLocation && (
             <>
               <View style={styles.divider} />
               <Text style={styles.sectionTitle}>Location</Text>
+
+              {listing.lat !== 0 && listing.lng !== 0 && (
+                <WeatherWidget lat={listing.lat} lng={listing.lng} />
+              )}
+
               <TouchableOpacity onPress={openInMaps} style={styles.directionsButton}>
                 <Navigation size={18} color="#FFFFFF" />
                 <Text style={styles.directionsButtonText}>Open in Google Maps</Text>
@@ -205,16 +293,19 @@ const styles = StyleSheet.create({
   },
   rightButtons: { flexDirection: 'row' },
   circleButton: {
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    padding: 10, borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.92)', padding: 10, borderRadius: 999,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 4, elevation: 4,
   },
   typeBadge: {
     position: 'absolute', bottom: 16, left: 16,
-    backgroundColor: 'rgba(14,165,164,0.9)',
-    paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999,
+    backgroundColor: 'rgba(14,165,164,0.9)', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999,
   },
   typeBadgeText: { color: '#FFF', fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 1 },
+  premiumBadge: {
+    position: 'absolute', bottom: 16, right: 16,
+    backgroundColor: 'rgba(245,158,11,0.9)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999,
+  },
+  premiumBadgeText: { color: '#FFF', fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' },
   contentCard: {
     backgroundColor: '#FFF', borderTopLeftRadius: 28, borderTopRightRadius: 28,
     marginTop: -24, padding: 24,
@@ -228,8 +319,8 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 17, fontWeight: 'bold', color: '#0B1220', marginBottom: 10 },
   description: { fontSize: 14, color: '#6B7280', lineHeight: 22 },
   directionsButton: {
-    backgroundColor: '#0EA5A4', flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    paddingVertical: 14, borderRadius: 14,
+    backgroundColor: '#0EA5A4', flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'center', paddingVertical: 14, borderRadius: 14,
   },
   directionsButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 15, marginLeft: 8 },
   floatingCTA: {
