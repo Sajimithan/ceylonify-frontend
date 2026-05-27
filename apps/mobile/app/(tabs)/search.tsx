@@ -23,7 +23,8 @@ const SEARCH_QUERY = `
   }
 `;
 
-const POPULAR_SEARCHES = ['Ella Train Journey', 'Mirissa Surfing', 'Sigiriya Rock', 'Galle Fort', 'Yala Safari'];
+const RECENT_SEARCHES = ['Ella Train Journey', 'Mirissa Surfing', 'Sigiriya Rock'];
+const POPULAR_SEARCHES = ['Colombo', 'Kandy', 'Galle', 'Nuwara Eliya', 'Trincomalee', 'Yala Safari'];
 
 export default function SearchScreen() {
   const router = useRouter();
@@ -91,15 +92,31 @@ export default function SearchScreen() {
 
       {!isSearching ? (
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+          {/* Recent Searches */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <History size={18} color="#667085" />
+              <Text style={styles.sectionTitle}>Recent Searches</Text>
+            </View>
+            <View style={styles.chipContainer}>
+              {RECENT_SEARCHES.map((item, idx) => (
+                <TouchableOpacity key={idx} style={styles.chip} onPress={() => setSearchQuery(item)}>
+                  <History size={14} color="#667085" style={{ marginRight: 6 }} />
+                  <Text style={styles.chipText}>{item}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* Popular Destinations */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <TrendingUp size={18} color="#0EA5A4" />
-              <Text style={styles.sectionTitle}>Popular Searches</Text>
+              <Text style={styles.sectionTitle}>Popular Destinations</Text>
             </View>
             <View style={styles.chipContainer}>
               {POPULAR_SEARCHES.map((item, idx) => (
                 <TouchableOpacity key={idx} style={styles.chip} onPress={() => setSearchQuery(item)}>
-                  <History size={14} color="#667085" style={{ marginRight: 6 }} />
                   <Text style={styles.chipText}>{item}</Text>
                 </TouchableOpacity>
               ))}

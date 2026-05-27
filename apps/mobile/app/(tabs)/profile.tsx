@@ -70,7 +70,9 @@ export default function ProfileScreen() {
 
   const menuItems = [
     { icon: <Crown size={20} color="#F59E0B" />, label: 'Premium Membership', isPremium: true, route: '/premium' as any },
+    { icon: <Settings size={20} color="#0EA5A4" />, label: 'App Settings', route: '/settings' as any },
     { icon: <Bell size={20} color="#0EA5A4" />, label: 'Notifications', route: null },
+    { icon: <CreditCard size={20} color="#0EA5A4" />, label: 'Payments & Payouts', route: null },
     { icon: <Shield size={20} color="#0EA5A4" />, label: 'Privacy & Security', route: null },
     { icon: <HelpCircle size={20} color="#0EA5A4" />, label: 'Help Center', route: null },
   ];

@@ -3,9 +3,20 @@ import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
   Image, ActivityIndicator, RefreshControl,
 } from 'react-native';
-import { Heart, MapPin, Trash2 } from 'lucide-react-native';
+import { Heart, MapPin, Trash2, Bookmark, Calendar, MoreVertical, Plus } from 'lucide-react-native';
 import { useGraphQL, gqlFetch } from '../../src/hooks/useGraphQL';
 import { useRouter } from 'expo-router';
+
+const ITINERARY_ITEMS = [
+  {
+    date: 'Oct 24, 2025',
+    items: [{ id: '1', title: 'Sigiriya Rock Fortress', location: 'Sigiriya', time: '9:00 AM' }],
+  },
+  {
+    date: 'Oct 25, 2025',
+    items: [{ id: '2', title: 'Temple of the Tooth', location: 'Kandy', time: '10:00 AM' }],
+  },
+];
 
 const API_BASE = (process.env.EXPO_PUBLIC_API_URL ?? 'http://10.0.2.2:3000/graphql').replace('/graphql', '');
 
@@ -30,6 +41,7 @@ const UNSAVE_MUTATION = `
 
 export default function SavedScreen() {
   const router = useRouter();
+  const [activeTab, setActiveTab] = useState<'saved' | 'itinerary'>('saved');
   const [refreshing, setRefreshing] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
 
@@ -79,12 +91,60 @@ export default function SavedScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Saved Experiences</Text>
-        <Text style={styles.headerSubtitle}>
-          {savedListings.length} saved listing{savedListings.length !== 1 ? 's' : ''}
-        </Text>
+        <Text style={styles.headerTitle}>Your Trips</Text>
       </View>
 
+      {/* Tabs */}
+      <View style={styles.tabContainer}>
+        <TouchableOpacity
+          onPress={() => setActiveTab('saved')}
+          style={[styles.tab, activeTab === 'saved' && styles.activeTab]}
+        >
+          <View style={styles.tabContent}>
+            <Bookmark size={16} color={activeTab === 'saved' ? '#0EA5A4' : '#667085'} />
+            <Text style={[styles.tabText, activeTab === 'saved' && styles.activeTabText]}>Saved</Text>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => setActiveTab('itinerary')}
+          style={[styles.tab, activeTab === 'itinerary' && styles.activeTab]}
+        >
+          <View style={styles.tabContent}>
+            <Calendar size={16} color={activeTab === 'itinerary' ? '#0EA5A4' : '#667085'} />
+            <Text style={[styles.tabText, activeTab === 'itinerary' && styles.activeTabText]}>Itinerary</Text>
+          </View>
+        </TouchableOpacity>
+      </View>
+
+      {activeTab === 'itinerary' ? (
+        <ScrollView style={styles.content} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
+          {ITINERARY_ITEMS.map((day, idx) => (
+            <View key={idx} style={styles.daySection}>
+              <View style={styles.dayHeader}>
+                <Text style={styles.dayDate}>{day.date}</Text>
+                <TouchableOpacity>
+                  <MoreVertical size={20} color="#667085" />
+                </TouchableOpacity>
+              </View>
+              {day.items.map((item, iIdx) => (
+                <View key={iIdx} style={styles.itineraryItem}>
+                  <View style={styles.itineraryIcon}>
+                    <MapPin size={24} color="#0EA5A4" />
+                  </View>
+                  <View style={styles.itineraryContent}>
+                    <Text style={styles.itineraryTitle} numberOfLines={1}>{item.title}</Text>
+                    <Text style={styles.itineraryMeta}>{item.location} • {item.time}</Text>
+                  </View>
+                  <TouchableOpacity style={styles.addButton}>
+                    <Plus size={16} color="#0EA5A4" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          ))}
+          <View style={{ height: 40 }} />
+        </ScrollView>
+      ) : (
       <ScrollView
         style={styles.content}
         contentContainerStyle={savedListings.length === 0 ? styles.emptyContent : styles.listContent}
@@ -164,6 +224,7 @@ export default function SavedScreen() {
         )}
         <View style={{ height: 40 }} />
       </ScrollView>
+      )}
     </View>
   );
 }
@@ -175,11 +236,46 @@ const styles = StyleSheet.create({
   retryButton: { backgroundColor: '#0EA5A4', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 999 },
   retryButtonText: { color: '#FFFFFF', fontWeight: 'bold' },
   header: {
-    paddingHorizontal: 24, paddingTop: 16, paddingBottom: 12,
-    backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E5E7EB',
+    paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8,
+    backgroundColor: '#FFFFFF',
   },
-  headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#0B1220' },
-  headerSubtitle: { fontSize: 13, color: '#667085', marginTop: 2 },
+  headerTitle: { fontSize: 28, fontWeight: 'bold', color: '#0B1220' },
+  tabContainer: {
+    flexDirection: 'row', paddingHorizontal: 24,
+    borderBottomWidth: 1, borderBottomColor: '#E5E7EB', backgroundColor: '#FFFFFF',
+  },
+  tab: {
+    flex: 1, paddingVertical: 12, alignItems: 'center',
+    borderBottomWidth: 2, borderBottomColor: 'transparent',
+  },
+  activeTab: { borderBottomColor: '#0EA5A4' },
+  tabContent: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  tabText: { fontSize: 14, fontWeight: 'bold', color: '#667085' },
+  activeTabText: { color: '#0EA5A4' },
+  daySection: { marginBottom: 28 },
+  dayHeader: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: 12,
+  },
+  dayDate: { fontSize: 18, fontWeight: 'bold', color: '#0B1220' },
+  itineraryItem: {
+    backgroundColor: '#FFFFFF', padding: 16, borderRadius: 12,
+    borderWidth: 1, borderColor: '#E5E7EB', flexDirection: 'row',
+    alignItems: 'center', marginBottom: 12,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
+  },
+  itineraryIcon: {
+    width: 56, height: 56, borderRadius: 12,
+    backgroundColor: '#E0F6F6', alignItems: 'center', justifyContent: 'center',
+  },
+  itineraryContent: { flex: 1, marginLeft: 14 },
+  itineraryTitle: { fontSize: 15, fontWeight: 'bold', color: '#0B1220' },
+  itineraryMeta: { fontSize: 12, color: '#667085', marginTop: 3 },
+  addButton: {
+    backgroundColor: '#F7FAFC', padding: 8, borderRadius: 999,
+    borderWidth: 1, borderColor: '#E5E7EB',
+  },
   content: { flex: 1 },
   emptyContent: { flexGrow: 1 },
   listContent: { padding: 16 },

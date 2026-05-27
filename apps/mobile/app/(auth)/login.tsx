@@ -136,6 +136,32 @@ export default function LoginScreen() {
                 : <Text style={styles.signInText}>Sign In</Text>
               }
             </TouchableOpacity>
+
+            {/* Divider */}
+            <View style={styles.dividerContainer}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.orText}>OR CONTINUE WITH</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            {/* Social / Guest Buttons */}
+            <View style={styles.socialContainer}>
+              <TouchableOpacity
+                style={styles.socialButton}
+                onPress={() => Alert.alert('Coming Soon', 'Google sign-in will be available in a future update.')}
+              >
+                <View style={styles.googleIconBg}>
+                  <Text style={styles.googleIconText}>G</Text>
+                </View>
+                <Text style={styles.socialButtonText}>Google</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => router.replace('/(tabs)/home')}
+                style={styles.socialButton}
+              >
+                <Text style={styles.socialButtonText}>Guest Access</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           <View style={styles.registerContainer}>
@@ -185,4 +211,19 @@ const styles = StyleSheet.create({
   registerContainer: { flexDirection: 'row', justifyContent: 'center', marginBottom: 40 },
   registerText: { color: '#667085', fontSize: 14 },
   registerLink: { color: '#0EA5A4', fontWeight: 'bold', fontSize: 14 },
+  dividerContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 24 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: '#E5E7EB' },
+  orText: { marginHorizontal: 16, fontSize: 12, fontWeight: 'bold', color: '#667085', textTransform: 'uppercase' },
+  socialContainer: { flexDirection: 'row', gap: 12, marginBottom: 32 },
+  socialButton: {
+    flex: 1, backgroundColor: '#FFFFFF', paddingVertical: 14, borderRadius: 999,
+    borderWidth: 1, borderColor: '#E5E7EB', flexDirection: 'row',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  googleIconBg: {
+    backgroundColor: '#EF4444', width: 20, height: 20, borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center', marginRight: 8,
+  },
+  googleIconText: { color: '#FFFFFF', fontSize: 10, fontWeight: '900' },
+  socialButtonText: { fontWeight: 'bold', color: '#0B1220', fontSize: 14 },
 });
