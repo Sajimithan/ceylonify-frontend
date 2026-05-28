@@ -27,6 +27,7 @@ const MY_ITINERARY_QUERY = `
   query MyItinerary {
     myItinerary {
       id listingId plannedDate note createdAt
+      listingTitle listingImageUrl listingType listingPlaceName
     }
   }
 `;
@@ -65,7 +66,7 @@ function groupByDate(items: any[]) {
 
 export default function SavedScreen() {
   const router = useRouter();
-  const { planWith, planPlace } = useLocalSearchParams<{ planWith?: string; planPlace?: string }>();
+  const { planWith, planPlace, tab } = useLocalSearchParams<{ planWith?: string; planPlace?: string; tab?: string }>();
   const autoSendRef = useRef<string | null>(null);
   const [activeTab, setActiveTab] = useState<'saved' | 'itinerary'>('saved');
   const [refreshing, setRefreshing] = useState(false);
@@ -95,6 +96,11 @@ export default function SavedScreen() {
 
   const savedMap: Record<string, string> = {};
   savedListings.forEach((l) => { savedMap[l.id] = l.title; });
+
+  // Switch to itinerary tab when navigated from map after "Add to Plan"
+  useEffect(() => {
+    if (tab === 'itinerary') setActiveTab('itinerary');
+  }, [tab]);
 
   // Auto-open AI planner when navigated from map with a listing context
   useEffect(() => {
@@ -286,31 +292,47 @@ export default function SavedScreen() {
                 <View style={styles.dayHeader}>
                   <Text style={styles.dayDate}>{date}</Text>
                 </View>
-                {items.map((item) => (
-                  <View key={item.id} style={styles.itineraryItem}>
-                    <View style={styles.itineraryIcon}>
-                      <MapPin size={24} color="#0EA5A4" />
+                {items.map((item) => {
+                  const title = item.listingTitle ?? savedMap[item.listingId] ?? 'Unknown listing';
+                  const imageUrl = item.listingImageUrl
+                    ? fixImageUrl(item.listingImageUrl)
+                    : null;
+                  return (
+                    <View key={item.id} style={styles.itineraryItem}>
+                      {imageUrl ? (
+                        <Image source={{ uri: imageUrl }} style={styles.itineraryImage} />
+                      ) : (
+                        <View style={styles.itineraryIcon}>
+                          <MapPin size={24} color="#0EA5A4" />
+                        </View>
+                      )}
+                      <View style={styles.itineraryContent}>
+                        <Text style={styles.itineraryTitle} numberOfLines={1}>{title}</Text>
+                        {item.listingPlaceName ? (
+                          <Text style={styles.itineraryMeta} numberOfLines={1}>
+                            📍 {item.listingPlaceName}
+                          </Text>
+                        ) : null}
+                        {item.listingType ? (
+                          <Text style={styles.itineraryType}>{item.listingType}</Text>
+                        ) : null}
+                        {item.note ? (
+                          <Text style={styles.itineraryNote} numberOfLines={1}>{item.note}</Text>
+                        ) : null}
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => handleRemoveFromItinerary(item.id)}
+                        disabled={removingItinerary === item.id}
+                        style={styles.removeItineraryBtn}
+                      >
+                        {removingItinerary === item.id
+                          ? <ActivityIndicator size="small" color="#EF4444" />
+                          : <Trash2 size={16} color="#EF4444" />
+                        }
+                      </TouchableOpacity>
                     </View>
-                    <View style={styles.itineraryContent}>
-                      <Text style={styles.itineraryTitle} numberOfLines={1}>
-                        {savedMap[item.listingId] ?? item.listingId}
-                      </Text>
-                      {item.note ? (
-                        <Text style={styles.itineraryMeta} numberOfLines={1}>{item.note}</Text>
-                      ) : null}
-                    </View>
-                    <TouchableOpacity
-                      onPress={() => handleRemoveFromItinerary(item.id)}
-                      disabled={removingItinerary === item.id}
-                      style={styles.removeItineraryBtn}
-                    >
-                      {removingItinerary === item.id
-                        ? <ActivityIndicator size="small" color="#EF4444" />
-                        : <Trash2 size={16} color="#EF4444" />
-                      }
-                    </TouchableOpacity>
-                  </View>
-                ))}
+                  );
+                })}
               </View>
             ))
           )}
@@ -564,12 +586,20 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
   },
   itineraryIcon: {
-    width: 48, height: 48, borderRadius: 12,
-    backgroundColor: '#E0F6F6', alignItems: 'center', justifyContent: 'center',
+    width: 56, height: 56, borderRadius: 12,
+    backgroundColor: '#E0F6F6', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  itineraryContent: { flex: 1, marginLeft: 14 },
-  itineraryTitle: { fontSize: 15, fontWeight: 'bold', color: '#0B1220' },
-  itineraryMeta: { fontSize: 12, color: '#667085', marginTop: 3 },
+  itineraryImage: {
+    width: 56, height: 56, borderRadius: 12, flexShrink: 0,
+  },
+  itineraryContent: { flex: 1, marginLeft: 12 },
+  itineraryTitle: { fontSize: 14, fontWeight: 'bold', color: '#0B1220', marginBottom: 2 },
+  itineraryMeta: { fontSize: 11, color: '#667085', marginBottom: 2 },
+  itineraryType: {
+    fontSize: 10, color: '#0EA5A4', fontWeight: 'bold',
+    textTransform: 'uppercase', marginBottom: 2,
+  },
+  itineraryNote: { fontSize: 11, color: '#9CA3AF', fontStyle: 'italic' },
   removeItineraryBtn: { padding: 8 },
   content: { flex: 1 },
   emptyContent: { flexGrow: 1 },

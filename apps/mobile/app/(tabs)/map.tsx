@@ -3,7 +3,8 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Image,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
-import { Search, Filter, MapPin, X, ArrowRight, Heart, CalendarPlus, Sparkles } from 'lucide-react-native';
+import { Search, Filter, MapPin, X, ArrowRight, Heart, CalendarPlus, Sparkles, Navigation } from 'lucide-react-native';
+import * as Location from 'expo-location';
 import { useGraphQL, gqlFetch } from '../../src/hooks/useGraphQL';
 import { useRouter } from 'expo-router';
 
@@ -17,7 +18,15 @@ function fixImageUrl(url?: string | null): string | null {
 const FEED_QUERY = `
   query MapFeed {
     searchListings(limit: 100) {
-      listings { id title description type category price lat lng placeName imageUrl isPremium }
+      listings { id title description type category price lat lng placeName imageUrl isPremium startDateTime }
+    }
+  }
+`;
+
+const NEARBY_QUERY = `
+  query NearbyListings($lat: Float!, $lng: Float!, $radiusKm: Float, $limit: Int) {
+    nearbyListings(lat: $lat, lng: $lng, radiusKm: $radiusKm, limit: $limit) {
+      id title description type category price lat lng placeName imageUrl isPremium startDateTime
     }
   }
 `;
@@ -31,8 +40,29 @@ const ADD_ITINERARY   = `mutation AddToItinerary($listingId: ID!, $plannedDate: 
 
 const GMAPS_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY ?? 'AIzaSyCAisocwaWcaNQxbt2MM9Kahvu-h3a24gc';
 
-function buildMapHtml(listings: { id: string; lat: number; lng: number }[]) {
+function buildMapHtml(
+  listings: { id: string; lat: number; lng: number }[],
+  userLoc?: { lat: number; lng: number },
+) {
   const json = JSON.stringify(listings);
+  const centerLat = userLoc ? userLoc.lat : 7.8731;
+  const centerLng = userLoc ? userLoc.lng : 80.7718;
+  const zoom = userLoc ? 12 : 8;
+
+  const userMarkerScript = userLoc ? `
+    new google.maps.Marker({
+      position: { lat: ${userLoc.lat}, lng: ${userLoc.lng} },
+      map: map,
+      icon: {
+        path: google.maps.SymbolPath.CIRCLE,
+        fillColor: '#3B82F6', fillOpacity: 1,
+        strokeColor: '#FFFFFF', strokeWeight: 3, scale: 12,
+      },
+      title: 'You are here',
+      zIndex: 999,
+    });
+  ` : '';
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -63,12 +93,14 @@ function buildMapHtml(listings: { id: string; lat: number; lng: number }[]) {
     ICON_ACTIVE.path = google.maps.SymbolPath.CIRCLE;
 
     map = new google.maps.Map(document.getElementById('map'), {
-      center: { lat: 7.8731, lng: 80.7718 },
-      zoom: 8,
+      center: { lat: ${centerLat}, lng: ${centerLng} },
+      zoom: ${zoom},
       disableDefaultUI: true,
       zoomControl: true,
       zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_BOTTOM },
     });
+
+    ${userMarkerScript}
 
     listings.forEach(function(listing) {
       var marker = new google.maps.Marker({
@@ -109,17 +141,34 @@ export default function MapScreen() {
   const [saveLoading, setSaveLoading] = useState(false);
   const [addedId, setAddedId] = useState<string | null>(null);
 
+  // Near Me state
+  const [nearMeActive, setNearMeActive] = useState(false);
+  const [nearMeLoading, setNearMeLoading] = useState(false);
+  const [nearMeError, setNearMeError] = useState<string | null>(null);
+  const [nearbyResults, setNearbyResults] = useState<any[]>([]);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+
   const { data, loading } = useGraphQL<{ searchListings: { listings: any[] } }>(FEED_QUERY);
   const { data: savedData, refetch: refetchSaved } = useGraphQL<{ savedListings: { id: string }[] }>(SAVED_LISTINGS_QUERY);
 
   const listings = data?.searchListings?.listings ?? [];
   const mappable = listings.filter((l) => l.lat && l.lng && l.lat !== 0 && l.lng !== 0);
-  const selectedListing = mappable.find((l) => l.id === selectedId) ?? null;
+
+  // When Near Me is active, show nearby results; otherwise show all
+  const activeListings = nearMeActive
+    ? nearbyResults.filter((l) => l.lat && l.lng && l.lat !== 0 && l.lng !== 0)
+    : mappable;
+
+  const selectedListing = activeListings.find((l) => l.id === selectedId) ?? null;
   const savedIds = new Set((savedData?.savedListings ?? []).map((l) => l.id));
 
   const mapHtml = useMemo(
-    () => buildMapHtml(mappable.map((l) => ({ id: l.id, lat: l.lat, lng: l.lng }))),
-    [mappable.length], // eslint-disable-line react-hooks/exhaustive-deps
+    () => buildMapHtml(
+      activeListings.map((l) => ({ id: l.id, lat: l.lat, lng: l.lng })),
+      userLocation ?? undefined,
+    ),
+    // Rebuild when listing set or near-me mode changes
+    [activeListings.length, nearMeActive], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   useEffect(() => {
@@ -136,6 +185,39 @@ export default function MapScreen() {
     } catch {}
   }
 
+  async function handleNearMe() {
+    if (nearMeActive) {
+      setNearMeActive(false);
+      setNearbyResults([]);
+      setUserLocation(null);
+      setNearMeError(null);
+      setSelectedId(null);
+      return;
+    }
+    setNearMeLoading(true);
+    setNearMeError(null);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setNearMeError('Location permission denied');
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const { latitude: lat, longitude: lng } = loc.coords;
+      setUserLocation({ lat, lng });
+      const result = await gqlFetch<{ nearbyListings: any[] }>(NEARBY_QUERY, {
+        lat, lng, radiusKm: 50, limit: 40,
+      });
+      setNearbyResults(result?.nearbyListings ?? []);
+      setNearMeActive(true);
+      setSelectedId(null);
+    } catch {
+      setNearMeError('Could not get location. Try again.');
+    } finally {
+      setNearMeLoading(false);
+    }
+  }
+
   async function toggleSave(listingId: string) {
     setSaveLoading(true);
     const isSaved = savedIds.has(listingId);
@@ -144,11 +226,16 @@ export default function MapScreen() {
     setSaveLoading(false);
   }
 
-  async function handleAddToPlan(listingId: string) {
-    const today = new Date().toISOString().split('T')[0];
-    await gqlFetch(ADD_ITINERARY, { listingId, plannedDate: today }).catch(() => {});
-    setAddedId(listingId);
-    setTimeout(() => setAddedId(null), 2500);
+  async function handleAddToPlan(listing: any) {
+    const plannedDate = listing.startDateTime
+      ? new Date(listing.startDateTime).toISOString()
+      : new Date().toISOString();
+    await gqlFetch(ADD_ITINERARY, { listingId: listing.id, plannedDate }).catch(() => {});
+    setAddedId(listing.id);
+    setTimeout(() => {
+      setAddedId(null);
+      router.push('/(tabs)/saved?tab=itinerary' as any);
+    }, 1500);
   }
 
   function handleAiPlan(listing: any) {
@@ -169,7 +256,7 @@ export default function MapScreen() {
         startInLoadingState={false}
       />
 
-      {/* Search bar overlay */}
+      {/* Search bar + Near Me row */}
       <View style={styles.searchContainer}>
         <View style={styles.searchBar}>
           <Search size={20} color="#667085" />
@@ -180,8 +267,33 @@ export default function MapScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Near Me pill */}
+      <View style={styles.nearMeRow}>
+        <TouchableOpacity
+          onPress={handleNearMe}
+          disabled={nearMeLoading}
+          style={[
+            styles.nearMeBtn,
+            nearMeActive && styles.nearMeBtnActive,
+            nearMeLoading && styles.nearMeBtnLoading,
+          ]}
+        >
+          {nearMeLoading ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Navigation size={14} color="#FFFFFF" />
+          )}
+          <Text style={styles.nearMeBtnText}>
+            {nearMeLoading ? 'Locating…' : nearMeActive ? '✕ All Listings' : 'Near Me'}
+          </Text>
+        </TouchableOpacity>
+        {nearMeError && (
+          <Text style={styles.nearMeError}>{nearMeError}</Text>
+        )}
+      </View>
+
       {/* Loading overlay */}
-      {loading && (
+      {loading && !nearMeActive && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color="#0EA5A4" />
           <Text style={styles.loadingText}>Loading map…</Text>
@@ -189,17 +301,19 @@ export default function MapScreen() {
       )}
 
       {/* Location count badge */}
-      {!selectedListing && !loading && mappable.length > 0 && (
-        <View style={styles.countBadge}>
+      {!selectedListing && !loading && activeListings.length > 0 && (
+        <View style={[styles.countBadge, nearMeActive && styles.countBadgeNearMe]}>
           <MapPin size={12} color="#FFFFFF" style={{ marginRight: 4 }} />
-          <Text style={styles.countText}>{mappable.length} locations</Text>
+          <Text style={styles.countText}>
+            {activeListings.length} {nearMeActive ? 'nearby' : 'locations'}
+          </Text>
         </View>
       )}
 
       {/* "Added to plan" banner */}
       {addedId && addedId === selectedId && (
         <View style={styles.addedBanner}>
-          <Text style={styles.addedBannerText}>📅 Added to today's plan!</Text>
+          <Text style={styles.addedBannerText}>📅 Added to plan!</Text>
         </View>
       )}
 
@@ -264,7 +378,7 @@ export default function MapScreen() {
 
               <TouchableOpacity
                 style={[styles.actionBtn, styles.actionBtnPlan]}
-                onPress={() => handleAddToPlan(selectedListing.id)}
+                onPress={() => handleAddToPlan(selectedListing)}
               >
                 <CalendarPlus size={15} color="#0EA5A4" />
                 <Text style={[styles.actionBtnText, { color: '#0EA5A4' }]}>Add to Plan</Text>
@@ -314,6 +428,25 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15, shadowRadius: 12, elevation: 8,
     borderWidth: 1, borderColor: '#E5E7EB',
   },
+  nearMeRow: {
+    position: 'absolute', top: 112, left: 24,
+    zIndex: 10, flexDirection: 'row', alignItems: 'center', gap: 10,
+  },
+  nearMeBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: '#10B981', paddingHorizontal: 16, paddingVertical: 9,
+    borderRadius: 999,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18, shadowRadius: 8, elevation: 6,
+  },
+  nearMeBtnActive: { backgroundColor: '#F59E0B' },
+  nearMeBtnLoading: { backgroundColor: '#6B7280' },
+  nearMeBtnText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 13 },
+  nearMeError: {
+    backgroundColor: 'rgba(239,68,68,0.9)', color: '#FFFFFF',
+    fontSize: 11, fontWeight: '600', paddingHorizontal: 10, paddingVertical: 5,
+    borderRadius: 8,
+  },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(255,255,255,0.85)',
@@ -327,6 +460,7 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2, shadowRadius: 8, elevation: 6, zIndex: 8,
   },
+  countBadgeNearMe: { backgroundColor: '#10B981' },
   countText: { color: '#FFFFFF', fontSize: 12, fontWeight: 'bold' },
   addedBanner: {
     position: 'absolute', bottom: 220, alignSelf: 'center',
