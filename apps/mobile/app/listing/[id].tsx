@@ -6,7 +6,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronLeft, Share2, Heart, MapPin, Clock, Tag, Navigation, Cloud, Flag } from 'lucide-react-native';
 import { useGraphQL, gqlFetch } from '../../src/hooks/useGraphQL';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import { WebView } from 'react-native-webview';
 
 const API_BASE = (process.env.EXPO_PUBLIC_API_URL ?? 'http://10.0.2.2:3000/graphql').replace('/graphql', '');
 const WEATHER_KEY = process.env.EXPO_PUBLIC_WEATHER_API_KEY;
@@ -34,6 +34,40 @@ const REPORT_MUTATION = `mutation ReportListing($listingId: ID!, $reason: String
 }`;
 
 const REPORT_REASONS = ['Inaccurate information', 'Inappropriate content', 'Scam or fraud', 'Duplicate listing', 'Other'];
+
+const GMAPS_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY ?? 'AIzaSyCAisocwaWcaNQxbt2MM9Kahvu-h3a24gc';
+
+function buildMapPreviewHtml(lat: number, lng: number): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <style>* { margin:0; padding:0; } #map { width:100vw; height:100vh; }</style>
+</head>
+<body>
+<div id="map"></div>
+<script>
+  function initMap() {
+    var center = { lat: ${lat}, lng: ${lng} };
+    var map = new google.maps.Map(document.getElementById('map'), {
+      center: center, zoom: 15,
+      disableDefaultUI: true,
+      gestureHandling: 'none',
+    });
+    new google.maps.Marker({
+      position: center, map: map,
+      icon: {
+        path: google.maps.SymbolPath.CIRCLE,
+        fillColor: '#0EA5A4', fillOpacity: 1,
+        strokeColor: '#FFFFFF', strokeWeight: 3, scale: 10,
+      },
+    });
+  }
+</script>
+<script src="https://maps.googleapis.com/maps/api/js?key=${GMAPS_KEY}&callback=initMap&loading=async" defer></script>
+</body>
+</html>`;
+}
 
 interface WeatherData {
   temp: number;
@@ -277,23 +311,14 @@ export default function ListingDetailScreen() {
                     activeOpacity={0.9}
                     style={styles.mapPreviewContainer}
                   >
-                    <MapView
+                    <WebView
+                      source={{ html: buildMapPreviewHtml(listing.lat, listing.lng) }}
                       style={styles.mapPreview}
-                      provider={PROVIDER_GOOGLE}
-                      initialRegion={{
-                        latitude: listing.lat,
-                        longitude: listing.lng,
-                        latitudeDelta: 0.02,
-                        longitudeDelta: 0.02,
-                      }}
+                      javaScriptEnabled
+                      domStorageEnabled
                       scrollEnabled={false}
-                      zoomEnabled={false}
-                      rotateEnabled={false}
-                      pitchEnabled={false}
                       pointerEvents="none"
-                    >
-                      <Marker coordinate={{ latitude: listing.lat, longitude: listing.lng }} pinColor="#0EA5A4" />
-                    </MapView>
+                    />
                     <View style={styles.mapPreviewOverlay}>
                       <Navigation size={14} color="#FFFFFF" />
                       <Text style={styles.mapPreviewOverlayText}>Open in Google Maps</Text>
@@ -424,7 +449,7 @@ const styles = StyleSheet.create({
     height: 180, borderRadius: 14, overflow: 'hidden',
     marginBottom: 12, position: 'relative',
   },
-  mapPreview: { ...StyleSheet.absoluteFillObject },
+  mapPreview: { width: '100%', height: '100%' },
   mapPreviewOverlay: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     backgroundColor: 'rgba(14,165,164,0.88)',

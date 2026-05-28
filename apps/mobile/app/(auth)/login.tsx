@@ -68,18 +68,20 @@ export default function LoginScreen() {
       // Backend unreachable — proceed as TRAVELER
     }
 
-    // Best-effort FCM token registration — non-blocking
-    void (async () => {
-      try {
-        const { getMessaging, getToken } = await import('firebase/messaging');
-        const token = await getToken(getMessaging());
-        if (token) {
-          await gqlFetch(`mutation RegisterDeviceToken($token: String!) { registerDeviceToken(token: $token) }`, { token });
+    // FCM token registration — web only (firebase/messaging uses browser APIs not available in React Native)
+    if (Platform.OS === 'web') {
+      void (async () => {
+        try {
+          const { getMessaging, getToken } = await import('firebase/messaging');
+          const token = await getToken(getMessaging());
+          if (token) {
+            await gqlFetch(`mutation RegisterDeviceToken($token: String!) { registerDeviceToken(token: $token) }`, { token });
+          }
+        } catch {
+          // permission denied or unsupported — skip
         }
-      } catch {
-        // expo-notifications not installed or permission denied — skip
-      }
-    })();
+      })();
+    }
 
     setLoading(false);
     router.replace('/(tabs)/home');

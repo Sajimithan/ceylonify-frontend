@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
   Image, ActivityIndicator, RefreshControl, Alert, Modal, TextInput,
@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { Heart, MapPin, Trash2, Bookmark, Calendar, Plus, X, Send } from 'lucide-react-native';
 import { useGraphQL, gqlFetch } from '../../src/hooks/useGraphQL';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 
 const API_BASE = (process.env.EXPO_PUBLIC_API_URL ?? 'http://10.0.2.2:3000/graphql').replace('/graphql', '');
 
@@ -65,6 +65,8 @@ function groupByDate(items: any[]) {
 
 export default function SavedScreen() {
   const router = useRouter();
+  const { planWith, planPlace } = useLocalSearchParams<{ planWith?: string; planPlace?: string }>();
+  const autoSendRef = useRef<string | null>(null);
   const [activeTab, setActiveTab] = useState<'saved' | 'itinerary'>('saved');
   const [refreshing, setRefreshing] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
@@ -93,6 +95,27 @@ export default function SavedScreen() {
 
   const savedMap: Record<string, string> = {};
   savedListings.forEach((l) => { savedMap[l.id] = l.title; });
+
+  // Auto-open AI planner when navigated from map with a listing context
+  useEffect(() => {
+    if (!planWith) return;
+    const prompt = planPlace
+      ? `Help me plan a trip that includes "${planWith}" at ${planPlace}.`
+      : `Help me plan a trip that includes "${planWith}".`;
+    autoSendRef.current = prompt;
+    setActiveTab('itinerary');
+    setChatMessages([]);
+    setChatInput('');
+    setAiModalVisible(true);
+  }, [planWith]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Once modal is open and chat is empty, fire the auto-send
+  useEffect(() => {
+    if (!aiModalVisible || !autoSendRef.current) return;
+    const prompt = autoSendRef.current;
+    autoSendRef.current = null;
+    sendMessage(prompt);
+  }, [aiModalVisible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function onRefresh() {
     setRefreshing(true);
