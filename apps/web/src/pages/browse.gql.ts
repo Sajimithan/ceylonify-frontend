@@ -40,8 +40,30 @@ export const SEARCH_LISTINGS = gql`
         isPremium
         viewCount
         createdAt
+        lat
+        lng
       }
       total
+    }
+  }
+`;
+
+export const NEARBY_LISTINGS_QUERY = gql`
+  query NearbyListings($lat: Float!, $lng: Float!, $radiusKm: Float, $limit: Int) {
+    nearbyListings(lat: $lat, lng: $lng, radiusKm: $radiusKm, limit: $limit) {
+      id
+      title
+      description
+      type
+      category
+      price
+      placeName
+      imageUrl
+      isPremium
+      viewCount
+      createdAt
+      lat
+      lng
     }
   }
 `;

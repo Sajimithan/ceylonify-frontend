@@ -2,6 +2,7 @@ import { useState } from "react";
 import { gql } from "@apollo/client";
 import { useMutation } from "@apollo/client/react";
 import { CREATE_LISTING } from "./listings.gql";
+import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
 
 const ENHANCE_DESCRIPTION = gql`
   mutation EnhanceDescription($text: String!) {
@@ -35,8 +36,8 @@ export function CreateListing() {
   const [category, setCategory] = useState<ListingCategory | "">("");
   const [price, setPrice] = useState("");
   const [startDateTime, setStartDateTime] = useState("");
-  const [lat, setLat] = useState("");
-  const [lng, setLng] = useState("");
+  const [lat, setLat] = useState<number | null>(null);
+  const [lng, setLng] = useState<number | null>(null);
   const [isPremium, setIsPremium] = useState(false);
 
   const [err, setErr] = useState<string | null>(null);
@@ -45,6 +46,9 @@ export function CreateListing() {
   const [aiApplied, setAiApplied] = useState(false);
   const [createListing, { loading }] = useMutation(CREATE_LISTING);
   const [enhance, { loading: enhancing }] = useMutation(ENHANCE_DESCRIPTION);
+  const { isLoaded: mapsLoaded } = useJsApiLoader({
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string,
+  });
 
   async function handleEnhance() {
     if (!description.trim()) return;
@@ -97,8 +101,8 @@ export function CreateListing() {
             title: title.trim(),
             description: description.trim(),
             type,
-            lat: lat ? parseFloat(lat) : 0,
-            lng: lng ? parseFloat(lng) : 0,
+            lat: lat ?? 0,
+            lng: lng ?? 0,
             placeName: placeName.trim(),
             ...(mapLink ? { mapLink: mapLink.trim() } : {}),
             ...(finalImageUrl ? { imageUrl: finalImageUrl } : {}),
@@ -304,33 +308,35 @@ export function CreateListing() {
                 onChange={(e) => setMapLink(e.target.value)}
                 placeholder="https://maps.app.goo.gl/..."
               />
-              <div className="rounded-lg bg-sky-50 border border-sky-100 px-4 py-3 text-xs text-sky-700 font-medium">
-                💡 To get coordinates: open <strong>Google Maps</strong>, right-click your location → <strong>copy the numbers</strong> shown (e.g. <code>6.9271, 79.8612</code>)
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="block">
-                  <div className="mb-2 uppercase text-slate-600 text-xs font-bold">Latitude</div>
-                  <input
-                    type="number"
-                    step="any"
-                    className="border-0 px-3 py-3 text-slate-600 bg-white rounded text-sm shadow focus:outline-none focus:ring w-full"
-                    value={lat}
-                    onChange={(e) => setLat(e.target.value)}
-                    placeholder="e.g. 6.9271"
-                  />
-                </label>
-                <label className="block">
-                  <div className="mb-2 uppercase text-slate-600 text-xs font-bold">Longitude</div>
-                  <input
-                    type="number"
-                    step="any"
-                    className="border-0 px-3 py-3 text-slate-600 bg-white rounded text-sm shadow focus:outline-none focus:ring w-full"
-                    value={lng}
-                    onChange={(e) => setLng(e.target.value)}
-                    placeholder="e.g. 79.8612"
-                  />
-                </label>
-              </div>
+              <p className="text-xs text-slate-500">
+                Click anywhere on the map to drop a pin, or drag the marker to fine-tune.
+              </p>
+              {mapsLoaded ? (
+                <GoogleMap
+                  mapContainerStyle={{ width: "100%", height: "300px", borderRadius: "10px" }}
+                  center={lat !== null && lng !== null ? { lat, lng } : { lat: 7.8731, lng: 80.7718 }}
+                  zoom={lat !== null ? 14 : 8}
+                  onClick={(e) => { if (e.latLng) { setLat(e.latLng.lat()); setLng(e.latLng.lng()); } }}
+                  options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false }}
+                >
+                  {lat !== null && lng !== null && (
+                    <Marker
+                      position={{ lat, lng }}
+                      draggable
+                      onDragEnd={(e) => { if (e.latLng) { setLat(e.latLng.lat()); setLng(e.latLng.lng()); } }}
+                    />
+                  )}
+                </GoogleMap>
+              ) : (
+                <div className="w-full h-72 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 text-sm font-semibold">
+                  Loading map…
+                </div>
+              )}
+              {lat !== null && lng !== null && (
+                <p className="text-xs text-slate-500 font-mono">
+                  📍 {lat.toFixed(6)}, {lng.toFixed(6)}
+                </p>
+              )}
             </div>
           </Card>
 

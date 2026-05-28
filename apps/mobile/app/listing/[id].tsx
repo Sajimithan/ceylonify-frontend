@@ -6,6 +6,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronLeft, Share2, Heart, MapPin, Clock, Tag, Navigation, Cloud, Flag } from 'lucide-react-native';
 import { useGraphQL, gqlFetch } from '../../src/hooks/useGraphQL';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 
 const API_BASE = (process.env.EXPO_PUBLIC_API_URL ?? 'http://10.0.2.2:3000/graphql').replace('/graphql', '');
 const WEATHER_KEY = process.env.EXPO_PUBLIC_WEATHER_API_KEY;
@@ -269,13 +270,44 @@ export default function ListingDetailScreen() {
               <Text style={styles.sectionTitle}>Location</Text>
 
               {listing.lat !== 0 && listing.lng !== 0 && (
-                <WeatherWidget lat={listing.lat} lng={listing.lng} />
+                <>
+                  <WeatherWidget lat={listing.lat} lng={listing.lng} />
+                  <TouchableOpacity
+                    onPress={openInMaps}
+                    activeOpacity={0.9}
+                    style={styles.mapPreviewContainer}
+                  >
+                    <MapView
+                      style={styles.mapPreview}
+                      provider={PROVIDER_GOOGLE}
+                      initialRegion={{
+                        latitude: listing.lat,
+                        longitude: listing.lng,
+                        latitudeDelta: 0.02,
+                        longitudeDelta: 0.02,
+                      }}
+                      scrollEnabled={false}
+                      zoomEnabled={false}
+                      rotateEnabled={false}
+                      pitchEnabled={false}
+                      pointerEvents="none"
+                    >
+                      <Marker coordinate={{ latitude: listing.lat, longitude: listing.lng }} pinColor="#0EA5A4" />
+                    </MapView>
+                    <View style={styles.mapPreviewOverlay}>
+                      <Navigation size={14} color="#FFFFFF" />
+                      <Text style={styles.mapPreviewOverlayText}>Open in Google Maps</Text>
+                    </View>
+                  </TouchableOpacity>
+                </>
               )}
 
-              <TouchableOpacity onPress={openInMaps} style={styles.directionsButton}>
-                <Navigation size={18} color="#FFFFFF" />
-                <Text style={styles.directionsButtonText}>Open in Google Maps</Text>
-              </TouchableOpacity>
+              {(listing.lat === 0 || listing.lng === 0) && listing.mapLink && (
+                <TouchableOpacity onPress={openInMaps} style={styles.directionsButton}>
+                  <Navigation size={18} color="#FFFFFF" />
+                  <Text style={styles.directionsButtonText}>Open in Google Maps</Text>
+                </TouchableOpacity>
+              )}
             </>
           )}
 
@@ -388,6 +420,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center', paddingVertical: 14, borderRadius: 14,
   },
   directionsButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 15, marginLeft: 8 },
+  mapPreviewContainer: {
+    height: 180, borderRadius: 14, overflow: 'hidden',
+    marginBottom: 12, position: 'relative',
+  },
+  mapPreview: { ...StyleSheet.absoluteFillObject },
+  mapPreviewOverlay: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    backgroundColor: 'rgba(14,165,164,0.88)',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 10, gap: 6,
+  },
+  mapPreviewOverlayText: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
   floatingCTA: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center',

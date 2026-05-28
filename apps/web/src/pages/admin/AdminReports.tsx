@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { gql, useMutation, useQuery } from "@apollo/client";
+import { gql } from "@apollo/client";
+import { useMutation, useQuery } from "@apollo/client/react";
 import { DashboardLayout } from "../../layouts/DashboardLayout";
 import { Card } from "../../ui/Card";
 import { Button } from "../../ui/Button";

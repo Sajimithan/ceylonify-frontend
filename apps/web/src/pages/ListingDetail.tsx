@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { GoogleMap, Marker, InfoWindow, useJsApiLoader } from "@react-google-maps/api";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation } from "@apollo/client/react";
 import { DashboardLayout } from "../layouts/DashboardLayout";
@@ -57,18 +58,38 @@ function WeatherWidget({ lat, lng }: { lat: number; lng: number }) {
   );
 }
 
-function MapEmbed({ lat, lng }: { lat: number; lng: number }) {
-  if (lat === 0 && lng === 0) return null;
-  const bbox = `${lng - 0.01},${lat - 0.01},${lng + 0.01},${lat + 0.01}`;
+function ListingMap({ lat, lng, title }: { lat: number; lng: number; title: string }) {
+  const { isLoaded } = useJsApiLoader({
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string,
+  });
+  const [infoOpen, setInfoOpen] = useState(true);
+  const center = { lat, lng };
+  const onLoad = useCallback(() => {}, []);
+
+  if (!isLoaded) {
+    return (
+      <div className="w-full h-72 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 text-sm font-semibold">
+        Loading map…
+      </div>
+    );
+  }
+
   return (
-    <iframe
-      title="Location Map"
-      src={`https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lng}`}
-      className="w-full rounded-lg shadow"
-      height={280}
-      style={{ border: 0 }}
-      loading="lazy"
-    />
+    <GoogleMap
+      mapContainerClassName="w-full h-72 rounded-xl shadow"
+      center={center}
+      zoom={15}
+      onLoad={onLoad}
+      options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false }}
+    >
+      <Marker position={center} onClick={() => setInfoOpen(true)}>
+        {infoOpen && (
+          <InfoWindow onCloseClick={() => setInfoOpen(false)}>
+            <div className="text-slate-700 font-semibold text-sm max-w-[180px]">{title}</div>
+          </InfoWindow>
+        )}
+      </Marker>
+    </GoogleMap>
   );
 }
 
@@ -190,7 +211,7 @@ export function ListingDetail() {
             {hasCoords && (
               <div className="bg-white rounded-xl shadow p-6">
                 <h2 className="text-slate-400 text-xs font-bold uppercase mb-3">Location</h2>
-                <MapEmbed lat={listing.lat} lng={listing.lng} />
+                <ListingMap lat={listing.lat} lng={listing.lng} title={listing.title} />
               </div>
             )}
           </div>
