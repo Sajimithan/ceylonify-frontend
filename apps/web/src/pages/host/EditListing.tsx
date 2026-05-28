@@ -41,6 +41,9 @@ export function EditListing() {
   const [category, setCategory] = useState<ListingCategory | "">("");
   const [price, setPrice] = useState("");
   const [startDateTime, setStartDateTime] = useState("");
+  const [lat, setLat] = useState("");
+  const [lng, setLng] = useState("");
+  const [isPremium, setIsPremium] = useState(false);
 
   const [err, setErr] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -72,7 +75,10 @@ export function EditListing() {
       setCategory((l.category as ListingCategory) || "");
       setPrice(l.price ? String(l.price) : "");
       setImagePreview(l.imageUrl || null);
-      
+      setLat(l.lat ? String(l.lat) : "");
+      setLng(l.lng ? String(l.lng) : "");
+      setIsPremium(l.isPremium ?? false);
+
       // format datetime for input
       if (l.startDateTime) {
         try {
@@ -128,6 +134,9 @@ export function EditListing() {
             ...(category ? { category } : {}),
             ...(price ? { price: Number(price) } : {}),
             ...(startDateTime ? { startDateTime } : {}),
+            ...(lat ? { lat: parseFloat(lat) } : {}),
+            ...(lng ? { lng: parseFloat(lng) } : {}),
+            isPremium,
           },
         },
       });
@@ -277,6 +286,19 @@ export function EditListing() {
                   </select>
                 </label>
               </div>
+
+              <label className="flex items-center gap-3 cursor-pointer group mt-2">
+                <input
+                  type="checkbox"
+                  checked={isPremium}
+                  onChange={(e) => setIsPremium(e.target.checked)}
+                  className="w-4 h-4 accent-violet-600"
+                />
+                <span className="text-xs font-bold uppercase text-slate-600 group-hover:text-slate-800">
+                  Premium-only listing{" "}
+                  <span className="text-slate-400 normal-case font-normal">(visible to premium subscribers only)</span>
+                </span>
+              </label>
             </div>
           </Card>
 
@@ -323,6 +345,33 @@ export function EditListing() {
                 onChange={(e) => setMapLink(e.target.value)}
                 placeholder="https://maps.app.goo.gl/..."
               />
+              <div className="rounded-lg bg-sky-50 border border-sky-100 px-4 py-3 text-xs text-sky-700 font-medium">
+                💡 To get coordinates: open <strong>Google Maps</strong>, right-click your location → <strong>copy the numbers</strong> shown (e.g. <code>6.9271, 79.8612</code>)
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block">
+                  <div className="mb-2 uppercase text-slate-600 text-xs font-bold">Latitude</div>
+                  <input
+                    type="number"
+                    step="any"
+                    className="border-0 px-3 py-3 text-slate-600 bg-white rounded text-sm shadow focus:outline-none focus:ring w-full"
+                    value={lat}
+                    onChange={(e) => setLat(e.target.value)}
+                    placeholder="e.g. 6.9271"
+                  />
+                </label>
+                <label className="block">
+                  <div className="mb-2 uppercase text-slate-600 text-xs font-bold">Longitude</div>
+                  <input
+                    type="number"
+                    step="any"
+                    className="border-0 px-3 py-3 text-slate-600 bg-white rounded text-sm shadow focus:outline-none focus:ring w-full"
+                    value={lng}
+                    onChange={(e) => setLng(e.target.value)}
+                    placeholder="e.g. 79.8612"
+                  />
+                </label>
+              </div>
             </div>
           </Card>
 

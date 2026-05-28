@@ -118,35 +118,65 @@ export function AdminUsers() {
                       {new Date(u.createdAt).toLocaleDateString()}
                     </td>
                     <td className="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4">
-                      {editingId === u.id ? (
-                        <div className="flex gap-2">
-                          <Button 
-                            className="!px-3 !py-1 !text-[10px]" 
-                            disabled={updating}
-                            onClick={() => handleRoleChange(u.id)}
-                          >
-                            Save
-                          </Button>
-                          <Button 
-                            variant="ghost" 
-                            className="!px-3 !py-1 !text-[10px]"
-                            onClick={() => setEditingId(null)}
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                      ) : (
-                        <Button 
-                          variant="ghost" 
-                          className="!px-3 !py-1 !text-[10px] text-sky-600 shadow-none border border-sky-100 hover:bg-sky-50"
-                          onClick={() => {
-                            setEditingId(u.id);
-                            setSelectedRole(u.role);
-                          }}
-                        >
-                          Edit Role
-                        </Button>
-                      )}
+                      <div className="flex gap-2 items-center flex-wrap">
+                        {editingId === u.id ? (
+                          <>
+                            <Button
+                              className="!px-3 !py-1 !text-[10px]"
+                              disabled={updating}
+                              onClick={() => handleRoleChange(u.id)}
+                            >
+                              Save
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              className="!px-3 !py-1 !text-[10px]"
+                              onClick={() => setEditingId(null)}
+                            >
+                              Cancel
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button
+                              variant="ghost"
+                              className="!px-3 !py-1 !text-[10px] text-sky-600 shadow-none border border-sky-100 hover:bg-sky-50"
+                              onClick={() => {
+                                setEditingId(u.id);
+                                setSelectedRole(u.role);
+                              }}
+                            >
+                              Edit Role
+                            </Button>
+                            {u.role === "TRAVELER" && (
+                              <Button
+                                variant="ghost"
+                                className="!px-3 !py-1 !text-[10px] text-violet-600 shadow-none border border-violet-100 hover:bg-violet-50"
+                                disabled={updating}
+                                onClick={async () => {
+                                  await changeRole({ variables: { id: u.id, role: "HOST" } });
+                                  await refetch();
+                                }}
+                              >
+                                Grant Premium
+                              </Button>
+                            )}
+                            {u.role === "HOST" && (
+                              <Button
+                                variant="ghost"
+                                className="!px-3 !py-1 !text-[10px] text-slate-500 shadow-none border border-slate-200 hover:bg-slate-50"
+                                disabled={updating}
+                                onClick={async () => {
+                                  await changeRole({ variables: { id: u.id, role: "TRAVELER" } });
+                                  await refetch();
+                                }}
+                              >
+                                Revoke Premium
+                              </Button>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

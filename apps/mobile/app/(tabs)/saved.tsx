@@ -1,22 +1,11 @@
 import React, { useState } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  Image, ActivityIndicator, RefreshControl,
+  Image, ActivityIndicator, RefreshControl, Alert, Modal, TextInput, Platform,
 } from 'react-native';
-import { Heart, MapPin, Trash2, Bookmark, Calendar, MoreVertical, Plus } from 'lucide-react-native';
+import { Heart, MapPin, Trash2, Bookmark, Calendar, Plus, X } from 'lucide-react-native';
 import { useGraphQL, gqlFetch } from '../../src/hooks/useGraphQL';
 import { useRouter } from 'expo-router';
-
-const ITINERARY_ITEMS = [
-  {
-    date: 'Oct 24, 2025',
-    items: [{ id: '1', title: 'Sigiriya Rock Fortress', location: 'Sigiriya', time: '9:00 AM' }],
-  },
-  {
-    date: 'Oct 25, 2025',
-    items: [{ id: '2', title: 'Temple of the Tooth', location: 'Kandy', time: '10:00 AM' }],
-  },
-];
 
 const API_BASE = (process.env.EXPO_PUBLIC_API_URL ?? 'http://10.0.2.2:3000/graphql').replace('/graphql', '');
 
@@ -33,27 +22,60 @@ const SAVED_LISTINGS_QUERY = `
   }
 `;
 
-const UNSAVE_MUTATION = `
-  mutation UnsaveListing($listingId: ID!) {
-    unsaveListing(listingId: $listingId)
+const MY_ITINERARY_QUERY = `
+  query MyItinerary {
+    myItinerary {
+      id listingId plannedDate note createdAt
+    }
   }
 `;
+
+const UNSAVE_MUTATION = `mutation UnsaveListing($listingId: ID!) { unsaveListing(listingId: $listingId) }`;
+const ADD_ITINERARY = `mutation AddToItinerary($listingId: ID!, $plannedDate: String!, $note: String) {
+  addToItinerary(listingId: $listingId, plannedDate: $plannedDate, note: $note) { id }
+}`;
+const REMOVE_ITINERARY = `mutation RemoveFromItinerary($itemId: ID!) { removeFromItinerary(itemId: $itemId) }`;
+
+function groupByDate(items: any[]) {
+  const map: Record<string, any[]> = {};
+  items.forEach((item) => {
+    const key = new Date(item.plannedDate).toLocaleDateString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+    });
+    if (!map[key]) map[key] = [];
+    map[key].push(item);
+  });
+  return Object.entries(map).sort(([a], [b]) => new Date(a).getTime() - new Date(b).getTime());
+}
 
 export default function SavedScreen() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'saved' | 'itinerary'>('saved');
   const [refreshing, setRefreshing] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
+  const [removingItinerary, setRemovingItinerary] = useState<string | null>(null);
 
-  const { data, loading, error, refetch } = useGraphQL<{ savedListings: any[] }>(
-    SAVED_LISTINGS_QUERY,
-  );
+  // Add-to-itinerary modal state
+  const [addModalVisible, setAddModalVisible] = useState(false);
+  const [addTargetListing, setAddTargetListing] = useState<any>(null);
+  const [plannedDate, setPlannedDate] = useState('');
+  const [note, setNote] = useState('');
+  const [addingToItinerary, setAddingToItinerary] = useState(false);
+
+  const { data, loading, error, refetch } = useGraphQL<{ savedListings: any[] }>(SAVED_LISTINGS_QUERY);
+  const { data: itineraryData, loading: itineraryLoading, refetch: refetchItinerary } = useGraphQL<{ myItinerary: any[] }>(MY_ITINERARY_QUERY);
 
   const savedListings = data?.savedListings ?? [];
+  const itineraryItems = itineraryData?.myItinerary ?? [];
+  const grouped = groupByDate(itineraryItems);
+
+  // Build a quick lookup from listingId -> saved listing title for itinerary display
+  const savedMap: Record<string, string> = {};
+  savedListings.forEach((l) => { savedMap[l.id] = l.title; });
 
   async function onRefresh() {
     setRefreshing(true);
-    await refetch();
+    await Promise.all([refetch(), refetchItinerary()]);
     setRefreshing(false);
   }
 
@@ -66,6 +88,45 @@ export default function SavedScreen() {
       // silent
     } finally {
       setRemoving(null);
+    }
+  }
+
+  function openAddModal(listing: any) {
+    setAddTargetListing(listing);
+    const today = new Date().toISOString().slice(0, 10);
+    setPlannedDate(today);
+    setNote('');
+    setAddModalVisible(true);
+  }
+
+  async function submitAddToItinerary() {
+    if (!addTargetListing || !plannedDate) return;
+    setAddingToItinerary(true);
+    try {
+      await gqlFetch(ADD_ITINERARY, {
+        listingId: addTargetListing.id,
+        plannedDate: new Date(plannedDate).toISOString(),
+        note: note.trim() || undefined,
+      });
+      setAddModalVisible(false);
+      await refetchItinerary();
+      Alert.alert('Added!', `"${addTargetListing.title}" added to your itinerary.`);
+    } catch {
+      Alert.alert('Error', 'Could not add to itinerary. Please try again.');
+    } finally {
+      setAddingToItinerary(false);
+    }
+  }
+
+  async function handleRemoveFromItinerary(itemId: string) {
+    setRemovingItinerary(itemId);
+    try {
+      await gqlFetch(REMOVE_ITINERARY, { itemId });
+      await refetchItinerary();
+    } catch {
+      // silent
+    } finally {
+      setRemovingItinerary(null);
     }
   }
 
@@ -117,114 +178,191 @@ export default function SavedScreen() {
       </View>
 
       {activeTab === 'itinerary' ? (
-        <ScrollView style={styles.content} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
-          {ITINERARY_ITEMS.map((day, idx) => (
-            <View key={idx} style={styles.daySection}>
-              <View style={styles.dayHeader}>
-                <Text style={styles.dayDate}>{day.date}</Text>
-                <TouchableOpacity>
-                  <MoreVertical size={20} color="#667085" />
-                </TouchableOpacity>
-              </View>
-              {day.items.map((item, iIdx) => (
-                <View key={iIdx} style={styles.itineraryItem}>
-                  <View style={styles.itineraryIcon}>
-                    <MapPin size={24} color="#0EA5A4" />
-                  </View>
-                  <View style={styles.itineraryContent}>
-                    <Text style={styles.itineraryTitle} numberOfLines={1}>{item.title}</Text>
-                    <Text style={styles.itineraryMeta}>{item.location} • {item.time}</Text>
-                  </View>
-                  <TouchableOpacity style={styles.addButton}>
-                    <Plus size={16} color="#0EA5A4" />
-                  </TouchableOpacity>
-                </View>
-              ))}
+        <ScrollView
+          style={styles.content}
+          contentContainerStyle={itineraryItems.length === 0 ? styles.emptyContent : styles.listContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5A4" />}
+          showsVerticalScrollIndicator={false}
+        >
+          {itineraryLoading && !itineraryData ? (
+            <View style={styles.centered}>
+              <ActivityIndicator size="large" color="#0EA5A4" />
             </View>
-          ))}
-          <View style={{ height: 40 }} />
-        </ScrollView>
-      ) : (
-      <ScrollView
-        style={styles.content}
-        contentContainerStyle={savedListings.length === 0 ? styles.emptyContent : styles.listContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5A4" />}
-        showsVerticalScrollIndicator={false}
-      >
-        {savedListings.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Heart size={64} color="#E5E7EB" />
-            <Text style={styles.emptyTitle}>No saved experiences yet</Text>
-            <Text style={styles.emptySubtitle}>
-              Tap the heart icon on any listing to save it here
-            </Text>
-          </View>
-        ) : (
-          savedListings.map((listing: any) => {
-            const imageUrl = fixImageUrl(listing.imageUrl);
-            const isRemoving = removing === listing.id;
-            return (
-              <TouchableOpacity
-                key={listing.id}
-                style={styles.listingCard}
-                activeOpacity={0.85}
-                onPress={() => router.push(`/listing/${listing.id}`)}
-              >
-                {imageUrl ? (
-                  <Image source={{ uri: imageUrl }} style={styles.listingImage} resizeMode="cover" />
-                ) : (
-                  <View style={[styles.listingImage, styles.listingImagePlaceholder]}>
-                    <Text style={{ fontSize: 36 }}>🏝️</Text>
-                  </View>
-                )}
-
-                <View style={styles.typeBadge}>
-                  <Text style={styles.typeBadgeText}>{listing.type}</Text>
+          ) : itineraryItems.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Calendar size={64} color="#E5E7EB" />
+              <Text style={styles.emptyTitle}>No itinerary yet</Text>
+              <Text style={styles.emptySubtitle}>
+                Tap the + on any saved listing to plan your trip
+              </Text>
+            </View>
+          ) : (
+            grouped.map(([date, items]) => (
+              <View key={date} style={styles.daySection}>
+                <View style={styles.dayHeader}>
+                  <Text style={styles.dayDate}>{date}</Text>
                 </View>
-
-                <View style={styles.listingBody}>
-                  <View style={styles.listingHeader}>
-                    <Text style={styles.listingTitle} numberOfLines={1}>{listing.title}</Text>
+                {items.map((item) => (
+                  <View key={item.id} style={styles.itineraryItem}>
+                    <View style={styles.itineraryIcon}>
+                      <MapPin size={24} color="#0EA5A4" />
+                    </View>
+                    <View style={styles.itineraryContent}>
+                      <Text style={styles.itineraryTitle} numberOfLines={1}>
+                        {savedMap[item.listingId] ?? item.listingId}
+                      </Text>
+                      {item.note ? (
+                        <Text style={styles.itineraryMeta} numberOfLines={1}>{item.note}</Text>
+                      ) : null}
+                    </View>
                     <TouchableOpacity
-                      onPress={() => handleRemove(listing.id)}
-                      disabled={isRemoving}
-                      style={styles.removeButton}
+                      onPress={() => handleRemoveFromItinerary(item.id)}
+                      disabled={removingItinerary === item.id}
+                      style={styles.removeItineraryBtn}
                     >
-                      {isRemoving
+                      {removingItinerary === item.id
                         ? <ActivityIndicator size="small" color="#EF4444" />
-                        : <Trash2 size={18} color="#EF4444" />
+                        : <Trash2 size={16} color="#EF4444" />
                       }
                     </TouchableOpacity>
                   </View>
-
-                  {listing.placeName && (
-                    <View style={styles.locationRow}>
-                      <MapPin size={13} color="#0EA5A4" />
-                      <Text style={styles.locationText} numberOfLines={1}>{listing.placeName}</Text>
+                ))}
+              </View>
+            ))
+          )}
+          <View style={{ height: 40 }} />
+        </ScrollView>
+      ) : (
+        <ScrollView
+          style={styles.content}
+          contentContainerStyle={savedListings.length === 0 ? styles.emptyContent : styles.listContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5A4" />}
+          showsVerticalScrollIndicator={false}
+        >
+          {savedListings.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Heart size={64} color="#E5E7EB" />
+              <Text style={styles.emptyTitle}>No saved experiences yet</Text>
+              <Text style={styles.emptySubtitle}>
+                Tap the heart icon on any listing to save it here
+              </Text>
+            </View>
+          ) : (
+            savedListings.map((listing: any) => {
+              const imageUrl = fixImageUrl(listing.imageUrl);
+              const isRemoving = removing === listing.id;
+              return (
+                <TouchableOpacity
+                  key={listing.id}
+                  style={styles.listingCard}
+                  activeOpacity={0.85}
+                  onPress={() => router.push(`/listing/${listing.id}`)}
+                >
+                  {imageUrl ? (
+                    <Image source={{ uri: imageUrl }} style={styles.listingImage} resizeMode="cover" />
+                  ) : (
+                    <View style={[styles.listingImage, styles.listingImagePlaceholder]}>
+                      <Text style={{ fontSize: 36 }}>🏝️</Text>
                     </View>
                   )}
 
-                  <Text style={styles.listingDescription} numberOfLines={2}>{listing.description}</Text>
-
-                  <View style={styles.listingFooter}>
-                    {listing.category ? (
-                      <View style={styles.categoryTag}>
-                        <Text style={styles.categoryTagText}>{listing.category}</Text>
-                      </View>
-                    ) : <View />}
-                    {listing.price
-                      ? <Text style={styles.listingPrice}>LKR {listing.price}</Text>
-                      : <Text style={styles.listingPriceFree}>Free</Text>
-                    }
+                  <View style={styles.typeBadge}>
+                    <Text style={styles.typeBadgeText}>{listing.type}</Text>
                   </View>
-                </View>
-              </TouchableOpacity>
-            );
-          })
-        )}
-        <View style={{ height: 40 }} />
-      </ScrollView>
+
+                  <View style={styles.listingBody}>
+                    <View style={styles.listingHeader}>
+                      <Text style={styles.listingTitle} numberOfLines={1}>{listing.title}</Text>
+                      <View style={{ flexDirection: 'row', gap: 8 }}>
+                        <TouchableOpacity
+                          onPress={() => openAddModal(listing)}
+                          style={styles.addToItineraryBtn}
+                        >
+                          <Plus size={16} color="#0EA5A4" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => handleRemove(listing.id)}
+                          disabled={isRemoving}
+                          style={styles.removeButton}
+                        >
+                          {isRemoving
+                            ? <ActivityIndicator size="small" color="#EF4444" />
+                            : <Trash2 size={18} color="#EF4444" />
+                          }
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+
+                    {listing.placeName && (
+                      <View style={styles.locationRow}>
+                        <MapPin size={13} color="#0EA5A4" />
+                        <Text style={styles.locationText} numberOfLines={1}>{listing.placeName}</Text>
+                      </View>
+                    )}
+
+                    <Text style={styles.listingDescription} numberOfLines={2}>{listing.description}</Text>
+
+                    <View style={styles.listingFooter}>
+                      {listing.category ? (
+                        <View style={styles.categoryTag}>
+                          <Text style={styles.categoryTagText}>{listing.category}</Text>
+                        </View>
+                      ) : <View />}
+                      {listing.price
+                        ? <Text style={styles.listingPrice}>LKR {listing.price}</Text>
+                        : <Text style={styles.listingPriceFree}>Free</Text>
+                      }
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          )}
+          <View style={{ height: 40 }} />
+        </ScrollView>
       )}
+
+      {/* Add to itinerary modal */}
+      <Modal visible={addModalVisible} animationType="slide" transparent onRequestClose={() => setAddModalVisible(false)}>
+        <View style={modalStyles.overlay}>
+          <View style={modalStyles.sheet}>
+            <View style={modalStyles.headerRow}>
+              <Text style={modalStyles.title}>Add to Itinerary</Text>
+              <TouchableOpacity onPress={() => setAddModalVisible(false)}>
+                <X size={22} color="#667085" />
+              </TouchableOpacity>
+            </View>
+            {addTargetListing && (
+              <Text style={modalStyles.listingName} numberOfLines={1}>{addTargetListing.title}</Text>
+            )}
+            <Text style={modalStyles.label}>Planned Date</Text>
+            <TextInput
+              style={modalStyles.input}
+              value={plannedDate}
+              onChangeText={setPlannedDate}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor="#9CA3AF"
+              keyboardType="numeric"
+            />
+            <Text style={modalStyles.label}>Note (optional)</Text>
+            <TextInput
+              style={[modalStyles.input, { height: 80, textAlignVertical: 'top' }]}
+              value={note}
+              onChangeText={setNote}
+              placeholder="e.g. Morning visit, bring sunscreen"
+              placeholderTextColor="#9CA3AF"
+              multiline
+            />
+            <TouchableOpacity
+              style={[modalStyles.submitBtn, (!plannedDate || addingToItinerary) && { opacity: 0.5 }]}
+              onPress={submitAddToItinerary}
+              disabled={!plannedDate || addingToItinerary}
+            >
+              <Text style={modalStyles.submitText}>{addingToItinerary ? 'Adding…' : 'Add to Itinerary'}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -253,11 +391,8 @@ const styles = StyleSheet.create({
   tabText: { fontSize: 14, fontWeight: 'bold', color: '#667085' },
   activeTabText: { color: '#0EA5A4' },
   daySection: { marginBottom: 28 },
-  dayHeader: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', marginBottom: 12,
-  },
-  dayDate: { fontSize: 18, fontWeight: 'bold', color: '#0B1220' },
+  dayHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  dayDate: { fontSize: 16, fontWeight: 'bold', color: '#0B1220' },
   itineraryItem: {
     backgroundColor: '#FFFFFF', padding: 16, borderRadius: 12,
     borderWidth: 1, borderColor: '#E5E7EB', flexDirection: 'row',
@@ -266,16 +401,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
   },
   itineraryIcon: {
-    width: 56, height: 56, borderRadius: 12,
+    width: 48, height: 48, borderRadius: 12,
     backgroundColor: '#E0F6F6', alignItems: 'center', justifyContent: 'center',
   },
   itineraryContent: { flex: 1, marginLeft: 14 },
   itineraryTitle: { fontSize: 15, fontWeight: 'bold', color: '#0B1220' },
   itineraryMeta: { fontSize: 12, color: '#667085', marginTop: 3 },
-  addButton: {
-    backgroundColor: '#F7FAFC', padding: 8, borderRadius: 999,
-    borderWidth: 1, borderColor: '#E5E7EB',
-  },
+  removeItineraryBtn: { padding: 8 },
   content: { flex: 1 },
   emptyContent: { flexGrow: 1 },
   listContent: { padding: 16 },
@@ -300,6 +432,10 @@ const styles = StyleSheet.create({
   listingBody: { padding: 14 },
   listingHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   listingTitle: { flex: 1, fontSize: 16, fontWeight: 'bold', color: '#0B1220', marginRight: 8 },
+  addToItineraryBtn: {
+    padding: 6, backgroundColor: '#E0F6F6', borderRadius: 999,
+    borderWidth: 1, borderColor: '#A5F3F0',
+  },
   removeButton: { padding: 4 },
   locationRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   locationText: { fontSize: 12, color: '#667085', marginLeft: 4, flex: 1 },
@@ -309,4 +445,25 @@ const styles = StyleSheet.create({
   categoryTagText: { fontSize: 11, color: '#166534', fontWeight: '600', textTransform: 'capitalize' },
   listingPrice: { fontSize: 14, fontWeight: 'bold', color: '#0EA5A4' },
   listingPriceFree: { fontSize: 13, fontWeight: '600', color: '#10B981' },
+});
+
+const modalStyles = StyleSheet.create({
+  overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' },
+  sheet: {
+    backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 24, paddingBottom: 40,
+  },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  title: { fontSize: 18, fontWeight: 'bold', color: '#0B1220' },
+  listingName: { fontSize: 14, color: '#0EA5A4', fontWeight: '600', marginBottom: 16 },
+  label: { fontSize: 12, fontWeight: 'bold', color: '#374151', textTransform: 'uppercase', marginBottom: 6, marginTop: 12 },
+  input: {
+    borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10,
+    paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: '#0B1220',
+  },
+  submitBtn: {
+    backgroundColor: '#0EA5A4', borderRadius: 999,
+    paddingVertical: 14, alignItems: 'center', marginTop: 20,
+  },
+  submitText: { color: '#FFF', fontWeight: 'bold', fontSize: 15 },
 });

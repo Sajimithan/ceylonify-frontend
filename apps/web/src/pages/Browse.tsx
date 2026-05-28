@@ -32,6 +32,8 @@ export function Browse() {
   const [debouncedQ, setDebouncedQ] = useState("");
   const [category, setCategory] = useState("");
   const [type, setType] = useState("");
+  const [startAfter, setStartAfter] = useState("");
+  const [startBefore, setStartBefore] = useState("");
   const [offset, setOffset] = useState(0);
   const [allListings, setAllListings] = useState<Listing[]>([]);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -62,10 +64,12 @@ export function Browse() {
           type: type || undefined,
           limit: LIMIT,
           offset: newOffset,
+          startAfter: startAfter || undefined,
+          startBefore: startBefore || undefined,
         },
       });
     },
-    [search, debouncedQ, category, type, offset]
+    [search, debouncedQ, category, type, offset, startAfter, startBefore]
   );
 
   // Debounce search input
@@ -79,7 +83,7 @@ export function Browse() {
     setOffset(0);
     setAllListings([]);
     runSearch(true);
-  }, [debouncedQ, category, type]); // eslint-disable-line
+  }, [debouncedQ, category, type, startAfter, startBefore]); // eslint-disable-line
 
   // Append results when offset changes (load more)
   useEffect(() => {
@@ -176,6 +180,32 @@ export function Browse() {
               </option>
             ))}
           </select>
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-bold text-slate-500 uppercase whitespace-nowrap">From</label>
+            <input
+              type="date"
+              value={startAfter}
+              onChange={(e) => setStartAfter(e.target.value)}
+              className="border-0 px-3 py-2 text-slate-600 bg-white rounded shadow text-sm focus:outline-none focus:ring"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-bold text-slate-500 uppercase whitespace-nowrap">To</label>
+            <input
+              type="date"
+              value={startBefore}
+              onChange={(e) => setStartBefore(e.target.value)}
+              className="border-0 px-3 py-2 text-slate-600 bg-white rounded shadow text-sm focus:outline-none focus:ring"
+            />
+          </div>
+          {(startAfter || startBefore) && (
+            <button
+              onClick={() => { setStartAfter(""); setStartBefore(""); }}
+              className="text-xs text-slate-400 hover:text-slate-700 font-semibold underline"
+            >
+              Clear dates
+            </button>
+          )}
         </div>
 
         {/* Results count */}

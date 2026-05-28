@@ -15,13 +15,30 @@ function fixImageUrl(url?: string | null): string | null {
 }
 
 const SEARCH_QUERY = `
-  query SearchListings($q: String, $limit: Int) {
-    searchListings(q: $q, limit: $limit) {
-      listings { id title description type category price placeName imageUrl createdAt }
+  query SearchListings($q: String, $limit: Int, $category: String, $startAfter: String, $startBefore: String) {
+    searchListings(q: $q, limit: $limit, category: $category, startAfter: $startAfter, startBefore: $startBefore) {
+      listings { id title description type category price placeName imageUrl createdAt startDateTime }
       total
     }
   }
 `;
+
+const CATEGORIES = ['NATURE', 'CULTURE', 'ADVENTURE', 'FOOD', 'WELLNESS', 'BEACH', 'HERITAGE'];
+
+function getDatePreset(preset: string): { startAfter?: string; startBefore?: string } {
+  const now = new Date();
+  if (preset === 'week') {
+    const end = new Date(now);
+    end.setDate(end.getDate() + 7);
+    return { startAfter: now.toISOString(), startBefore: end.toISOString() };
+  }
+  if (preset === 'month') {
+    const end = new Date(now);
+    end.setDate(end.getDate() + 30);
+    return { startAfter: now.toISOString(), startBefore: end.toISOString() };
+  }
+  return {};
+}
 
 const RECENT_SEARCHES = ['Ella Train Journey', 'Mirissa Surfing', 'Sigiriya Rock'];
 const POPULAR_SEARCHES = ['Colombo', 'Kandy', 'Galle', 'Nuwara Eliya', 'Trincomalee', 'Yala Safari'];
@@ -29,6 +46,8 @@ const POPULAR_SEARCHES = ['Colombo', 'Kandy', 'Galle', 'Nuwara Eliya', 'Trincoma
 export default function SearchScreen() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [datePreset, setDatePreset] = useState('');
   const [results, setResults] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -37,7 +56,7 @@ export default function SearchScreen() {
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
-    if (!searchQuery.trim()) {
+    if (!searchQuery.trim() && !selectedCategory && !datePreset) {
       setResults([]);
       setTotal(0);
       return;
@@ -46,9 +65,16 @@ export default function SearchScreen() {
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
       try {
+        const { startAfter, startBefore } = getDatePreset(datePreset);
         const data = await gqlFetch<{ searchListings: { listings: any[]; total: number } }>(
           SEARCH_QUERY,
-          { q: searchQuery.trim(), limit: 30 },
+          {
+            q: searchQuery.trim() || undefined,
+            limit: 30,
+            category: selectedCategory || undefined,
+            startAfter,
+            startBefore,
+          },
         );
         setResults(data?.searchListings?.listings ?? []);
         setTotal(data?.searchListings?.total ?? 0);
@@ -62,37 +88,70 @@ export default function SearchScreen() {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [searchQuery]);
+  }, [searchQuery, selectedCategory, datePreset]);
 
-  const isSearching = searchQuery.trim().length > 0;
+  const isSearching = searchQuery.trim().length > 0 || !!selectedCategory || !!datePreset;
+
+  function resultCountLabel() {
+    const parts: string[] = [];
+    if (searchQuery.trim()) parts.push(`"${searchQuery.trim()}"`);
+    if (selectedCategory) parts.push(selectedCategory.charAt(0) + selectedCategory.slice(1).toLowerCase());
+    if (datePreset) parts.push(datePreset === 'week' ? 'this week' : 'this month');
+    return `${total} result${total !== 1 ? 's' : ''}${parts.length ? ` for ${parts.join(', ')}` : ''}`;
+  }
 
   return (
     <View style={styles.container}>
-      {/* Search Header */}
+      {/* Search bar */}
       <View style={styles.header}>
-        <View style={styles.searchRow}>
-          <View style={styles.searchInputContainer}>
-            <SearchIcon size={20} color="#667085" />
-            <TextInput
-              placeholder="Where to next?"
-              style={styles.input}
-              placeholderTextColor="#667085"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              autoFocus
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <X size={20} color="#667085" />
-              </TouchableOpacity>
-            )}
-          </View>
+        <View style={styles.searchInputContainer}>
+          <SearchIcon size={20} color="#667085" />
+          <TextInput
+            placeholder="Where to next?"
+            style={styles.input}
+            placeholderTextColor="#667085"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <X size={20} color="#667085" />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
+      {/* Filter chips */}
+      <View style={filterStyles.row}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={filterStyles.scroll}>
+          {(['week', 'month'] as const).map((p) => (
+            <TouchableOpacity
+              key={p}
+              style={[filterStyles.chip, datePreset === p && filterStyles.chipActive]}
+              onPress={() => setDatePreset(datePreset === p ? '' : p)}
+            >
+              <Text style={[filterStyles.chipText, datePreset === p && filterStyles.chipTextActive]}>
+                {p === 'week' ? 'This Week' : 'This Month'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+          {CATEGORIES.map((cat) => (
+            <TouchableOpacity
+              key={cat}
+              style={[filterStyles.chip, selectedCategory === cat && filterStyles.chipActive]}
+              onPress={() => setSelectedCategory(selectedCategory === cat ? '' : cat)}
+            >
+              <Text style={[filterStyles.chipText, selectedCategory === cat && filterStyles.chipTextActive]}>
+                {cat.charAt(0) + cat.slice(1).toLowerCase()}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* Content */}
       {!isSearching ? (
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-          {/* Recent Searches */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <History size={18} color="#667085" />
@@ -108,7 +167,6 @@ export default function SearchScreen() {
             </View>
           </View>
 
-          {/* Popular Destinations */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <TrendingUp size={18} color="#0EA5A4" />
@@ -129,16 +187,14 @@ export default function SearchScreen() {
             {loading ? (
               <ActivityIndicator size="small" color="#0EA5A4" />
             ) : (
-              <Text style={styles.resultCount}>
-                {total} result{total !== 1 ? 's' : ''} for "{searchQuery}"
-              </Text>
+              <Text style={styles.resultCount}>{resultCountLabel()}</Text>
             )}
           </View>
 
           {!loading && results.length === 0 && (
             <View style={styles.emptyState}>
               <Text style={styles.emptyTitle}>No results found</Text>
-              <Text style={styles.emptySubtitle}>Try a different search term</Text>
+              <Text style={styles.emptySubtitle}>Try a different search term or filter</Text>
             </View>
           )}
 
@@ -173,7 +229,11 @@ export default function SearchScreen() {
                   )}
                   <Text style={styles.resultDescription} numberOfLines={2}>{listing.description}</Text>
                   <View style={styles.resultFooter}>
-                    {listing.category && <Text style={styles.resultCategory}>{listing.category}</Text>}
+                    {listing.category && (
+                      <Text style={styles.resultCategory}>
+                        {listing.category.charAt(0) + listing.category.slice(1).toLowerCase()}
+                      </Text>
+                    )}
                     {listing.price
                       ? <Text style={styles.resultPrice}>LKR {listing.price}</Text>
                       : <Text style={styles.resultPriceFree}>Free</Text>
@@ -194,12 +254,11 @@ export default function SearchScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F7FAFC' },
   header: {
-    paddingHorizontal: 24, paddingVertical: 16,
+    paddingHorizontal: 16, paddingVertical: 12,
     backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E5E7EB',
   },
-  searchRow: { flexDirection: 'row', alignItems: 'center' },
   searchInputContainer: {
-    flex: 1, backgroundColor: '#F7FAFC', flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#F7FAFC', flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12,
     borderWidth: 1, borderColor: '#E5E7EB', gap: 12,
   },
@@ -240,4 +299,19 @@ const styles = StyleSheet.create({
   resultCategory: { fontSize: 12, color: '#0EA5A4', fontWeight: '600', textTransform: 'capitalize' },
   resultPrice: { fontSize: 15, fontWeight: 'bold', color: '#0EA5A4' },
   resultPriceFree: { fontSize: 13, fontWeight: '600', color: '#10B981' },
+});
+
+const filterStyles = StyleSheet.create({
+  row: {
+    backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#F1F5F9',
+    paddingVertical: 8,
+  },
+  scroll: { paddingHorizontal: 16, gap: 8, flexDirection: 'row' },
+  chip: {
+    borderRadius: 999, paddingHorizontal: 14, paddingVertical: 6,
+    borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#FFFFFF',
+  },
+  chipActive: { backgroundColor: '#0EA5A4', borderColor: '#0EA5A4' },
+  chipText: { fontSize: 12, color: '#374151', fontWeight: '600' },
+  chipTextActive: { color: '#FFFFFF' },
 });

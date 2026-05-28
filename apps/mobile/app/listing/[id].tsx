@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, Image, TouchableOpacity,
-  ActivityIndicator, Linking, StyleSheet,
+  ActivityIndicator, Linking, StyleSheet, Alert, Modal, TextInput,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ChevronLeft, Share2, Heart, MapPin, Clock, Tag, Navigation, Cloud } from 'lucide-react-native';
+import { ChevronLeft, Share2, Heart, MapPin, Clock, Tag, Navigation, Cloud, Flag } from 'lucide-react-native';
 import { useGraphQL, gqlFetch } from '../../src/hooks/useGraphQL';
 
 const API_BASE = (process.env.EXPO_PUBLIC_API_URL ?? 'http://10.0.2.2:3000/graphql').replace('/graphql', '');
@@ -28,6 +28,11 @@ const GET_LISTING_QUERY = `
 const SAVED_LISTINGS_QUERY = `query SavedListings { savedListings { id } }`;
 const SAVE_MUTATION = `mutation SaveListing($listingId: ID!) { saveListing(listingId: $listingId) }`;
 const UNSAVE_MUTATION = `mutation UnsaveListing($listingId: ID!) { unsaveListing(listingId: $listingId) }`;
+const REPORT_MUTATION = `mutation ReportListing($listingId: ID!, $reason: String!, $comment: String) {
+  reportListing(listingId: $listingId, reason: $reason, comment: $comment)
+}`;
+
+const REPORT_REASONS = ['Inaccurate information', 'Inappropriate content', 'Scam or fraud', 'Duplicate listing', 'Other'];
 
 interface WeatherData {
   temp: number;
@@ -93,6 +98,10 @@ export default function ListingDetailScreen() {
   const router = useRouter();
   const [saved, setSaved] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
+  const [reportVisible, setReportVisible] = useState(false);
+  const [reportReason, setReportReason] = useState('');
+  const [reportComment, setReportComment] = useState('');
+  const [reportSubmitting, setReportSubmitting] = useState(false);
 
   const { data, loading, error } = useGraphQL<{ listing: any }>(GET_LISTING_QUERY, { id });
   const { data: savedData } = useGraphQL<{ savedListings: { id: string }[] }>(SAVED_LISTINGS_QUERY);
@@ -131,6 +140,22 @@ export default function ListingDetailScreen() {
       Linking.openURL(listing.mapLink);
     }
   };
+
+  async function submitReport() {
+    if (!reportReason || !listing) return;
+    setReportSubmitting(true);
+    try {
+      await gqlFetch(REPORT_MUTATION, { listingId: listing.id, reason: reportReason, comment: reportComment || undefined });
+      setReportVisible(false);
+      setReportReason('');
+      setReportComment('');
+      Alert.alert('Report submitted', 'Thank you. Our team will review this listing.');
+    } catch {
+      Alert.alert('Error', 'Could not submit report. Please try again.');
+    } finally {
+      setReportSubmitting(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -174,8 +199,8 @@ export default function ListingDetailScreen() {
               <ChevronLeft size={22} color="#0B1220" />
             </TouchableOpacity>
             <View style={styles.rightButtons}>
-              <TouchableOpacity style={styles.circleButton}>
-                <Share2 size={20} color="#0B1220" />
+              <TouchableOpacity style={styles.circleButton} onPress={() => setReportVisible(true)}>
+                <Flag size={20} color="#0B1220" />
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={toggleSave}
@@ -270,6 +295,46 @@ export default function ListingDetailScreen() {
           <Text style={styles.bookButtonText}>Book Now</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Report modal */}
+      <Modal visible={reportVisible} animationType="slide" transparent onRequestClose={() => setReportVisible(false)}>
+        <View style={reportStyles.overlay}>
+          <View style={reportStyles.sheet}>
+            <Text style={reportStyles.title}>Report Listing</Text>
+            <Text style={reportStyles.subtitle}>Why are you reporting this listing?</Text>
+            {REPORT_REASONS.map((r) => (
+              <TouchableOpacity
+                key={r}
+                style={[reportStyles.reasonBtn, reportReason === r && reportStyles.reasonBtnActive]}
+                onPress={() => setReportReason(r)}
+              >
+                <Text style={[reportStyles.reasonText, reportReason === r && reportStyles.reasonTextActive]}>{r}</Text>
+              </TouchableOpacity>
+            ))}
+            <TextInput
+              style={reportStyles.commentInput}
+              placeholder="Additional comments (optional)"
+              placeholderTextColor="#9CA3AF"
+              value={reportComment}
+              onChangeText={setReportComment}
+              multiline
+              numberOfLines={3}
+            />
+            <View style={reportStyles.actions}>
+              <TouchableOpacity style={reportStyles.cancelBtn} onPress={() => setReportVisible(false)}>
+                <Text style={reportStyles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[reportStyles.submitBtn, (!reportReason || reportSubmitting) && { opacity: 0.5 }]}
+                onPress={submitReport}
+                disabled={!reportReason || reportSubmitting}
+              >
+                <Text style={reportStyles.submitText}>{reportSubmitting ? 'Submitting…' : 'Submit Report'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -335,4 +400,39 @@ const styles = StyleSheet.create({
   ctaPriceValue: { fontSize: 20, fontWeight: 'bold', color: '#0B1220' },
   bookButton: { backgroundColor: '#0EA5A4', paddingHorizontal: 32, paddingVertical: 14, borderRadius: 999 },
   bookButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
+});
+
+const reportStyles = StyleSheet.create({
+  overlay: {
+    flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  sheet: {
+    backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 24, paddingBottom: 40,
+  },
+  title: { fontSize: 18, fontWeight: 'bold', color: '#0B1220', marginBottom: 4 },
+  subtitle: { fontSize: 13, color: '#667085', marginBottom: 16 },
+  reasonBtn: {
+    borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10,
+    paddingHorizontal: 14, paddingVertical: 11, marginBottom: 8,
+  },
+  reasonBtnActive: { borderColor: '#0EA5A4', backgroundColor: '#E0F6F6' },
+  reasonText: { fontSize: 14, color: '#374151' },
+  reasonTextActive: { color: '#0B7A79', fontWeight: '600' },
+  commentInput: {
+    borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10,
+    paddingHorizontal: 14, paddingVertical: 10, fontSize: 13, color: '#374151',
+    marginTop: 8, marginBottom: 16, textAlignVertical: 'top',
+  },
+  actions: { flexDirection: 'row', gap: 12 },
+  cancelBtn: {
+    flex: 1, borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 999,
+    paddingVertical: 14, alignItems: 'center',
+  },
+  cancelText: { color: '#667085', fontWeight: '600' },
+  submitBtn: {
+    flex: 2, backgroundColor: '#EF4444', borderRadius: 999,
+    paddingVertical: 14, alignItems: 'center',
+  },
+  submitText: { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
 });

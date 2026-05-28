@@ -74,14 +74,19 @@ export async function gqlFetch<T = any>(
   variables?: Record<string, any>,
 ): Promise<T> {
   const token = await auth?.currentUser?.getIdToken();
-  const response = await fetch(API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify({ query, variables: variables || {} }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ query, variables: variables || {} }),
+    });
+  } catch {
+    throw new Error('Network error: backend unreachable');
+  }
   const result = await response.json();
   if (result.errors) throw new Error(result.errors[0]?.message || 'GraphQL Error');
   return result.data;

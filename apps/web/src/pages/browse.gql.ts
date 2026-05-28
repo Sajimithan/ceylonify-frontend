@@ -16,6 +16,8 @@ export const SEARCH_LISTINGS = gql`
     $type: String
     $limit: Int
     $offset: Int
+    $startAfter: String
+    $startBefore: String
   ) {
     searchListings(
       q: $q
@@ -23,6 +25,8 @@ export const SEARCH_LISTINGS = gql`
       type: $type
       limit: $limit
       offset: $offset
+      startAfter: $startAfter
+      startBefore: $startBefore
     ) {
       listings {
         id

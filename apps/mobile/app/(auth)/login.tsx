@@ -35,26 +35,10 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth!, email.trim(), password);
-
-      const data = await gqlFetch<{ me: { role: string } | null }>(ME_QUERY);
-      const role = data?.me?.role;
-
-      if (role === 'HOST' || role === 'ADMIN') {
-        await auth!.signOut();
-        Alert.alert(
-          'Web Dashboard Required',
-          'Your account has host or admin access. Please sign in at the Ceylonify web dashboard to manage your listings.',
-          [{ text: 'OK' }],
-        );
-        return;
-      }
-
-      router.replace('/(tabs)/home');
     } catch (e: any) {
       const code: string = e?.code ?? '';
-      console.error('🔐 Login error code:', code, e?.message);
       if (code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
-        setError(`Invalid email or password. (${code})`);
+        setError('Invalid email or password.');
       } else if (code === 'auth/too-many-requests') {
         setError('Too many attempts. Please try again later.');
       } else if (code === 'auth/network-request-failed') {
@@ -62,9 +46,43 @@ export default function LoginScreen() {
       } else {
         setError(`Sign in failed: ${code || e?.message || 'unknown error'}`);
       }
-    } finally {
       setLoading(false);
+      return;
     }
+
+    // Firebase auth succeeded. Check role best-effort — don't block login if backend is down.
+    try {
+      const data = await gqlFetch<{ me: { role: string } | null }>(ME_QUERY);
+      const role = data?.me?.role;
+      if (role === 'HOST' || role === 'ADMIN') {
+        await auth!.signOut();
+        setLoading(false);
+        Alert.alert(
+          'Web Dashboard Required',
+          'Your account has host or admin access. Please sign in at the Ceylonify web dashboard to manage your listings.',
+          [{ text: 'OK' }],
+        );
+        return;
+      }
+    } catch {
+      // Backend unreachable — proceed as TRAVELER
+    }
+
+    // Best-effort FCM token registration — non-blocking
+    void (async () => {
+      try {
+        const { getMessaging, getToken } = await import('firebase/messaging');
+        const token = await getToken(getMessaging());
+        if (token) {
+          await gqlFetch(`mutation RegisterDeviceToken($token: String!) { registerDeviceToken(token: $token) }`, { token });
+        }
+      } catch {
+        // expo-notifications not installed or permission denied — skip
+      }
+    })();
+
+    setLoading(false);
+    router.replace('/(tabs)/home');
   }
 
   return (
