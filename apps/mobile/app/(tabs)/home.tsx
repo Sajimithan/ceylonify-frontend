@@ -15,6 +15,8 @@ function fixImageUrl(url?: string | null): string | null {
   return url.replace('http://localhost:3000', API_BASE);
 }
 
+const NOTIFICATIONS_QUERY = `query MyNotifications { myNotifications { id read } }`;
+
 const SEARCH_LISTINGS = `
   query SearchListings($category: String, $q: String, $limit: Int) {
     searchListings(category: $category, q: $q, limit: $limit) {
@@ -59,6 +61,9 @@ export default function HomeScreen() {
     searchListings: { listings: any[]; total: number };
   }>(SEARCH_LISTINGS, variables);
 
+  const { data: notifData } = useGraphQL<{ myNotifications: { id: string; read: boolean }[] }>(NOTIFICATIONS_QUERY);
+  const unreadCount = (notifData?.myNotifications ?? []).filter((n) => !n.read).length;
+
   const listings = data?.searchListings?.listings ?? [];
 
   async function onRefresh() {
@@ -99,8 +104,16 @@ export default function HomeScreen() {
             <MapPin size={18} color="#0EA5A4" style={{ marginLeft: 8 }} />
           </View>
         </View>
-        <TouchableOpacity style={styles.notificationButton}>
+        <TouchableOpacity
+          style={styles.notificationButton}
+          onPress={() => router.push('/notifications' as any)}
+        >
           <Bell size={20} color="#0B1220" />
+          {unreadCount > 0 && (
+            <View style={styles.notifBadge}>
+              <Text style={styles.notifBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+            </View>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -250,8 +263,15 @@ const styles = StyleSheet.create({
   greetingText: { color: '#0B1220', fontSize: 20, fontWeight: 'bold' },
   notificationButton: {
     backgroundColor: '#F1F5F9', padding: 10, borderRadius: 999,
-    borderWidth: 1, borderColor: '#E5E7EB',
+    borderWidth: 1, borderColor: '#E5E7EB', position: 'relative',
   },
+  notifBadge: {
+    position: 'absolute', top: -4, right: -4,
+    backgroundColor: '#EF4444', borderRadius: 999, minWidth: 18, height: 18,
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3,
+    borderWidth: 1.5, borderColor: '#FFFFFF',
+  },
+  notifBadgeText: { color: '#FFFFFF', fontSize: 9, fontWeight: 'bold' },
   scrollView: { flex: 1 },
   searchSection: { paddingHorizontal: 16, paddingVertical: 14 },
   searchBar: {

@@ -1,25 +1,41 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert,
+  Image, Modal, TextInput, ActivityIndicator,
 } from 'react-native';
-import { Settings, CreditCard, Bell, Shield, HelpCircle, LogOut, ChevronRight, Crown } from 'lucide-react-native';
+import {
+  Settings, CreditCard, Bell, Shield, HelpCircle, LogOut,
+  ChevronRight, Crown, Camera, Pencil, X, Check,
+} from 'lucide-react-native';
 import { useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import { auth } from '../../src/lib/firebase';
-import { useGraphQL } from '../../src/hooks/useGraphQL';
+import { useGraphQL, gqlFetch } from '../../src/hooks/useGraphQL';
 
-const ME_QUERY = `query Me { me { role isPremium } }`;
+const API_BASE = (process.env.EXPO_PUBLIC_API_URL ?? 'http://10.0.2.2:3000/graphql').replace('/graphql', '');
 
-function Initials({ name, email }: { name?: string | null; email?: string | null }) {
-  const letters = name
-    ? name.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)
-    : email
-    ? email[0].toUpperCase()
-    : '?';
+const ME_QUERY = `query Me { me { role isPremium displayName avatarUrl } }`;
+const UPDATE_PROFILE = `mutation UpdateProfile($displayName: String, $avatarUrl: String) {
+  updateProfile(displayName: $displayName, avatarUrl: $avatarUrl) { displayName avatarUrl }
+}`;
+
+function Avatar({ uri, initials }: { uri?: string | null; initials: string }) {
+  if (uri) {
+    return <Image source={{ uri }} style={avatarStyles.circle} />;
+  }
   return (
     <View style={avatarStyles.circle}>
-      <Text style={avatarStyles.text}>{letters}</Text>
+      <Text style={avatarStyles.text}>{initials}</Text>
     </View>
   );
+}
+
+function getInitials(displayName?: string | null, email?: string | null) {
+  if (displayName) {
+    return displayName.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);
+  }
+  if (email) return email[0].toUpperCase();
+  return '?';
 }
 
 const avatarStyles = StyleSheet.create({
@@ -38,40 +54,97 @@ export default function ProfileScreen() {
   const router = useRouter();
   const user = auth?.currentUser;
 
-  const { data } = useGraphQL<{ me: { role: string; isPremium: boolean } | null }>(ME_QUERY);
+  const { data, refetch } = useGraphQL<{ me: { role: string; isPremium: boolean; displayName?: string; avatarUrl?: string } | null }>(ME_QUERY);
   const role = data?.me?.role ?? null;
   const isPremium = data?.me?.isPremium ?? false;
+  const dbDisplayName = data?.me?.displayName ?? null;
+  const dbAvatarUrl = data?.me?.avatarUrl ?? null;
 
-  const displayName = user?.displayName || user?.email?.split('@')[0] || 'Traveler';
+  const displayName = dbDisplayName || user?.displayName || user?.email?.split('@')[0] || 'Traveler';
   const memberSince = user?.metadata?.creationTime
     ? new Date(user.metadata.creationTime).toLocaleDateString('en-US', { year: 'numeric', month: 'long' })
     : null;
 
+  // Name editing
+  const [nameModalVisible, setNameModalVisible] = useState(false);
+  const [nameInput, setNameInput] = useState('');
+  const [nameSaving, setNameSaving] = useState(false);
+
+  // Avatar uploading
+  const [avatarUploading, setAvatarUploading] = useState(false);
+
+  async function openNameEdit() {
+    setNameInput(displayName);
+    setNameModalVisible(true);
+  }
+
+  async function saveName() {
+    if (!nameInput.trim()) return;
+    setNameSaving(true);
+    try {
+      await gqlFetch(UPDATE_PROFILE, { displayName: nameInput.trim() });
+      await refetch();
+      setNameModalVisible(false);
+    } catch {
+      Alert.alert('Error', 'Could not update name. Please try again.');
+    } finally {
+      setNameSaving(false);
+    }
+  }
+
+  async function handleAvatarPick() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission required', 'Allow photo library access to set a profile picture.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+
+    setAvatarUploading(true);
+    try {
+      const asset = result.assets[0];
+      const formData = new FormData();
+      formData.append('file', { uri: asset.uri, name: 'avatar.jpg', type: 'image/jpeg' } as any);
+      const uploadRes = await fetch(`${API_BASE}/upload`, { method: 'POST', body: formData });
+      if (!uploadRes.ok) throw new Error('Upload failed');
+      const uploadData = await uploadRes.json();
+      const avatarUrl = `${API_BASE}${uploadData.url}`;
+      await gqlFetch(UPDATE_PROFILE, { avatarUrl });
+      await refetch();
+    } catch {
+      Alert.alert('Error', 'Could not upload photo. Please try again.');
+    } finally {
+      setAvatarUploading(false);
+    }
+  }
+
   const handleLogout = async () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Logout', style: 'destructive',
-          onPress: async () => {
-            try {
-              await auth!.signOut();
-              router.replace('/(auth)/landing');
-            } catch {
-              Alert.alert('Error', 'Failed to logout. Please try again.');
-            }
-          },
+    Alert.alert('Logout', 'Are you sure you want to logout?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Logout', style: 'destructive',
+        onPress: async () => {
+          try {
+            await auth!.signOut();
+            router.replace('/(auth)/landing');
+          } catch {
+            Alert.alert('Error', 'Failed to logout. Please try again.');
+          }
         },
-      ],
-    );
+      },
+    ]);
   };
 
   const menuItems = [
     { icon: <Crown size={20} color="#F59E0B" />, label: 'Premium Membership', isPremium: true, route: '/premium' as any },
     { icon: <Settings size={20} color="#0EA5A4" />, label: 'App Settings', route: '/settings' as any },
-    { icon: <Bell size={20} color="#0EA5A4" />, label: 'Notifications', route: null },
+    { icon: <Bell size={20} color="#0EA5A4" />, label: 'Notifications', route: '/notifications' as any },
     { icon: <CreditCard size={20} color="#0EA5A4" />, label: 'Payments & Payouts', route: null },
     { icon: <Shield size={20} color="#0EA5A4" />, label: 'Privacy & Security', route: null },
     { icon: <HelpCircle size={20} color="#0EA5A4" />, label: 'Help Center', route: null },
@@ -83,9 +156,28 @@ export default function ProfileScreen() {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.profileSection}>
-            <Initials name={user?.displayName} email={user?.email} />
-            <Text style={styles.name}>{displayName}</Text>
-            <Text style={styles.email}>{user?.email}</Text>
+            {/* Avatar with camera button */}
+            <View style={styles.avatarWrapper}>
+              <Avatar uri={dbAvatarUrl} initials={getInitials(displayName, user?.email)} />
+              <TouchableOpacity
+                style={styles.cameraBtn}
+                onPress={handleAvatarPick}
+                disabled={avatarUploading}
+              >
+                {avatarUploading
+                  ? <ActivityIndicator size="small" color="#FFFFFF" />
+                  : <Camera size={14} color="#FFFFFF" />
+                }
+              </TouchableOpacity>
+            </View>
+
+            {/* Name with edit button */}
+            <View style={styles.nameRow}>
+              <Text style={styles.name}>{displayName}</Text>
+              <TouchableOpacity onPress={openNameEdit} style={styles.editNameBtn}>
+                <Pencil size={14} color="#0EA5A4" />
+              </TouchableOpacity>
+            </View>
 
             <View style={styles.badgeRow}>
               {role && (
@@ -104,18 +196,6 @@ export default function ProfileScreen() {
             {memberSince && (
               <Text style={styles.memberSince}>Member since {memberSince}</Text>
             )}
-          </View>
-        </View>
-
-        {/* Info Cards */}
-        <View style={styles.infoSection}>
-          <View style={styles.infoCard}>
-            <Text style={styles.infoLabel}>EMAIL</Text>
-            <Text style={styles.infoValue} numberOfLines={1}>{user?.email ?? '—'}</Text>
-          </View>
-          <View style={styles.infoCard}>
-            <Text style={styles.infoLabel}>ACCOUNT ID</Text>
-            <Text style={styles.infoValueMono} numberOfLines={1}>{user?.uid ? user.uid.slice(0, 16) + '…' : '—'}</Text>
           </View>
         </View>
 
@@ -145,9 +225,42 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.footer}>
-          <Text style={styles.versionText}>Ceylonify v1.0.0 · Index: 220596H</Text>
+          <Text style={styles.versionText}>Ceylonify v1.0.0</Text>
         </View>
       </ScrollView>
+
+      {/* Name edit modal */}
+      <Modal visible={nameModalVisible} transparent animationType="fade" onRequestClose={() => setNameModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Edit Name</Text>
+              <TouchableOpacity onPress={() => setNameModalVisible(false)}>
+                <X size={20} color="#667085" />
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.modalInput}
+              value={nameInput}
+              onChangeText={setNameInput}
+              placeholder="Your display name"
+              placeholderTextColor="#9CA3AF"
+              autoFocus
+              maxLength={50}
+            />
+            <TouchableOpacity
+              style={[styles.modalSaveBtn, (!nameInput.trim() || nameSaving) && { opacity: 0.5 }]}
+              onPress={saveName}
+              disabled={!nameInput.trim() || nameSaving}
+            >
+              {nameSaving
+                ? <ActivityIndicator size="small" color="#FFFFFF" />
+                : <><Check size={16} color="#FFFFFF" /><Text style={styles.modalSaveBtnText}>Save</Text></>
+              }
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -163,8 +276,18 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05, shadowRadius: 8, elevation: 3,
   },
   profileSection: { alignItems: 'center' },
-  name: { fontSize: 22, fontWeight: 'bold', color: '#0B1220', marginTop: 14 },
-  email: { fontSize: 13, color: '#667085', marginTop: 2 },
+  avatarWrapper: { position: 'relative' },
+  cameraBtn: {
+    position: 'absolute', bottom: 0, right: 0,
+    backgroundColor: '#0EA5A4', borderRadius: 999,
+    width: 28, height: 28, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: '#FFFFFF',
+  },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14 },
+  name: { fontSize: 22, fontWeight: 'bold', color: '#0B1220' },
+  editNameBtn: {
+    backgroundColor: '#E0F6F6', padding: 6, borderRadius: 999,
+  },
   badgeRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
   badge: {
     paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999,
@@ -175,14 +298,6 @@ const styles = StyleSheet.create({
   badgePremium: { backgroundColor: '#FEF3C7' },
   badgeText: { fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase', color: '#0EA5A4' },
   memberSince: { fontSize: 12, color: '#9CA3AF', marginTop: 8 },
-  infoSection: { paddingHorizontal: 16, paddingTop: 20, gap: 12, flexDirection: 'row' },
-  infoCard: {
-    flex: 1, backgroundColor: '#FFFFFF', borderRadius: 12,
-    padding: 14, borderWidth: 1, borderColor: '#E5E7EB',
-  },
-  infoLabel: { fontSize: 10, fontWeight: 'bold', color: '#9CA3AF', letterSpacing: 0.5, marginBottom: 4 },
-  infoValue: { fontSize: 13, fontWeight: '600', color: '#374151' },
-  infoValueMono: { fontSize: 11, color: '#667085', fontFamily: 'monospace' },
   menuSection: { paddingHorizontal: 16, paddingVertical: 24 },
   menuItem: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -201,4 +316,25 @@ const styles = StyleSheet.create({
   logoutText: { fontSize: 16, fontWeight: 'bold', color: '#EF4444' },
   footer: { alignItems: 'center', paddingBottom: 40 },
   versionText: { fontSize: 12, color: '#9CA3AF' },
+  // Modal
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center', justifyContent: 'center', padding: 24,
+  },
+  modalCard: {
+    backgroundColor: '#FFFFFF', borderRadius: 20, padding: 24, width: '100%',
+  },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#0B1220' },
+  modalInput: {
+    borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12,
+    paddingHorizontal: 16, paddingVertical: 12, fontSize: 16, color: '#0B1220',
+    marginBottom: 16,
+  },
+  modalSaveBtn: {
+    backgroundColor: '#0EA5A4', borderRadius: 999,
+    paddingVertical: 14, alignItems: 'center', justifyContent: 'center',
+    flexDirection: 'row', gap: 8,
+  },
+  modalSaveBtnText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 15 },
 });

@@ -202,7 +202,15 @@ export default function MapScreen() {
         setNearMeError('Location permission denied');
         return;
       }
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      // Fast path: use cached/mock location (instant on emulator if location is set)
+      let loc = await Location.getLastKnownPositionAsync();
+      if (!loc) {
+        loc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+          timeoutMs: 10_000,
+        });
+      }
+      if (!loc) throw new Error('No location found. On emulator: set a mock location via Extended Controls → Location tab.');
       const { latitude: lat, longitude: lng } = loc.coords;
       setUserLocation({ lat, lng });
       const result = await gqlFetch<{ nearbyListings: any[] }>(NEARBY_QUERY, {
@@ -211,8 +219,8 @@ export default function MapScreen() {
       setNearbyResults(result?.nearbyListings ?? []);
       setNearMeActive(true);
       setSelectedId(null);
-    } catch {
-      setNearMeError('Could not get location. Try again.');
+    } catch (e: any) {
+      setNearMeError(e?.message ?? 'Could not get location. Try again.');
     } finally {
       setNearMeLoading(false);
     }
