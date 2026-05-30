@@ -318,31 +318,37 @@ export function Browse() {
                       key={l.id}
                       position={{ lat: l.lat!, lng: l.lng! }}
                       onClick={() => setActiveMarkerId(l.id)}
-                    >
-                      {activeMarkerId === l.id && (
-                        <InfoWindow onCloseClick={() => setActiveMarkerId(null)}>
-                          <div className="max-w-[200px]">
-                            {l.imageUrl && (
-                              <img src={l.imageUrl} alt={l.title} className="w-full h-20 object-cover rounded mb-2" />
-                            )}
-                            <div className="font-bold text-slate-700 text-sm leading-snug mb-1">{l.title}</div>
-                            {l.placeName && (
-                              <div className="text-xs text-slate-400 mb-1">📍 {l.placeName}</div>
-                            )}
-                            <div className="text-xs font-bold text-sky-600 mb-2">
-                              {l.price ? `LKR ${Number(l.price).toLocaleString()}` : "Free"}
-                            </div>
-                            <button
-                              onClick={() => handleCardClick(l)}
-                              className="text-xs font-bold text-white bg-sky-500 hover:bg-sky-600 px-3 py-1 rounded transition-colors"
-                            >
-                              View →
-                            </button>
-                          </div>
-                        </InfoWindow>
-                      )}
-                    </Marker>
+                    />
                   ))}
+                {(() => {
+                  const active = allListings.find((l) => l.id === activeMarkerId);
+                  if (!active || !active.lat || !active.lng) return null;
+                  return (
+                    <InfoWindow
+                      position={{ lat: active.lat, lng: active.lng }}
+                      onCloseClick={() => setActiveMarkerId(null)}
+                    >
+                      <div className="max-w-[200px]">
+                        {active.imageUrl && (
+                          <img src={active.imageUrl} alt={active.title} className="w-full h-20 object-cover rounded mb-2" />
+                        )}
+                        <div className="font-bold text-slate-700 text-sm leading-snug mb-1">{active.title}</div>
+                        {active.placeName && (
+                          <div className="text-xs text-slate-400 mb-1">📍 {active.placeName}</div>
+                        )}
+                        <div className="text-xs font-bold text-brand-600 mb-2">
+                          {active.price ? `LKR ${Number(active.price).toLocaleString()}` : "Free"}
+                        </div>
+                        <button
+                          onClick={() => handleCardClick(active)}
+                          className="text-xs font-bold text-white bg-brand-500 hover:bg-brand-600 px-3 py-1 rounded transition-colors"
+                        >
+                          View →
+                        </button>
+                      </div>
+                    </InfoWindow>
+                  );
+                })()}
               </GoogleMap>
             ) : (
               <div className="w-full h-[560px] rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 text-sm font-semibold">

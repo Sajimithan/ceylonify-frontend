@@ -84,13 +84,12 @@ function ListingMap({ lat, lng, title }: { lat: number; lng: number; title: stri
       onLoad={onLoad}
       options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false }}
     >
-      <Marker position={center} onClick={() => setInfoOpen(true)}>
-        {infoOpen && (
-          <InfoWindow onCloseClick={() => setInfoOpen(false)}>
-            <div className="text-slate-700 font-semibold text-sm max-w-[180px]">{title}</div>
-          </InfoWindow>
-        )}
-      </Marker>
+      <Marker position={center} onClick={() => setInfoOpen(true)} />
+      {infoOpen && (
+        <InfoWindow position={center} onCloseClick={() => setInfoOpen(false)}>
+          <div className="text-slate-700 font-semibold text-sm max-w-[180px]">{title}</div>
+        </InfoWindow>
+      )}
     </GoogleMap>
   );
 }
