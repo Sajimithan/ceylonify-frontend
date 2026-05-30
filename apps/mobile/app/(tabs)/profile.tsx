@@ -179,6 +179,10 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
 
+            {user?.email && (
+              <Text style={styles.email}>{user.email}</Text>
+            )}
+
             <View style={styles.badgeRow}>
               {role && (
                 <View style={[styles.badge, role === 'ADMIN' ? styles.badgeAdmin : styles.badgeTraveler]}>
@@ -297,6 +301,7 @@ const styles = StyleSheet.create({
   badgeAdmin: { backgroundColor: '#EDE9FE' },
   badgePremium: { backgroundColor: '#FEF3C7' },
   badgeText: { fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase', color: '#0EA5A4' },
+  email: { fontSize: 13, color: '#667085', marginTop: 6 },
   memberSince: { fontSize: 12, color: '#9CA3AF', marginTop: 8 },
   menuSection: { paddingHorizontal: 16, paddingVertical: 24 },
   menuItem: {

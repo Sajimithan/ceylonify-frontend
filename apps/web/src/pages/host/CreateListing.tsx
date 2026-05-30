@@ -1,41 +1,69 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { gql } from "@apollo/client";
 import { useMutation } from "@apollo/client/react";
 import { CREATE_LISTING } from "./listings.gql";
-import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
-
-const ENHANCE_DESCRIPTION = gql`
-  mutation EnhanceDescription($text: String!) {
-    enhanceDescription(text: $text)
-  }
-`;
+import {
+  GoogleMap,
+  Marker,
+  Autocomplete,
+  useJsApiLoader,
+} from "@react-google-maps/api";
+import { MAPS_LIBRARIES } from "../../lib/googleMaps";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 import { Input } from "../../ui/Input";
 import { Button } from "../../ui/Button";
 import { Card } from "../../ui/Card";
 import { DashboardLayout } from "../../layouts/DashboardLayout";
 import { useNavigate } from "react-router-dom";
 
+const ENHANCE_DESCRIPTION = gql`
+  mutation EnhanceDescription($text: String!) {
+    enhanceDescription(text: $text)
+  }
+`;
+
+
 type ListingType = "EVENT" | "RENTAL" | "ACCOMMODATION" | "ACTIVITY";
-type ListingCategory = "NATURE" | "CULTURE" | "ADVENTURE" | "FOOD" | "WELLNESS" | "BEACH" | "HERITAGE";
+type ListingCategory =
+  | "NATURE" | "CULTURE" | "ADVENTURE" | "FOOD" | "WELLNESS"
+  | "BEACH" | "HERITAGE" | "PARTY" | "NIGHTLIFE" | "SPORTS"
+  | "ARTS" | "MUSIC" | "FESTIVAL" | "FAMILY";
+
+type ListingTemplate = {
+  id: string;
+  name: string;
+  title: string;
+  description: string;
+  type: ListingType;
+  category: ListingCategory | "";
+  price: string;
+  placeName: string;
+  mapLink: string;
+  isPremium: boolean;
+};
+
+function loadTemplates(): ListingTemplate[] {
+  try {
+    return JSON.parse(localStorage.getItem("ceylonify_templates") || "[]");
+  } catch {
+    return [];
+  }
+}
 
 export function CreateListing() {
   const nav = useNavigate();
 
-  // Required fields
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [type, setType] = useState<ListingType>("EVENT");
   const [placeName, setPlaceName] = useState("");
   const [mapLink, setMapLink] = useState("");
-  
-  // Media fields
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-
-  // Optional fields
   const [category, setCategory] = useState<ListingCategory | "">("");
   const [price, setPrice] = useState("");
-  const [startDateTime, setStartDateTime] = useState("");
+  const [startDateTime, setStartDateTime] = useState<Date | null>(null);
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
   const [isPremium, setIsPremium] = useState(false);
@@ -44,10 +72,19 @@ export function CreateListing() {
   const [success, setSuccess] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [aiApplied, setAiApplied] = useState(false);
+
+  const [templates, setTemplates] = useState<ListingTemplate[]>(loadTemplates);
+  const [showTemplateSave, setShowTemplateSave] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [templateSaved, setTemplateSaved] = useState(false);
+
+  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+
   const [createListing, { loading }] = useMutation(CREATE_LISTING);
   const [enhance, { loading: enhancing }] = useMutation(ENHANCE_DESCRIPTION);
   const { isLoaded: mapsLoaded } = useJsApiLoader({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string,
+    libraries: MAPS_LIBRARIES,
   });
 
   async function handleEnhance() {
@@ -60,10 +97,53 @@ export function CreateListing() {
     }
   }
 
-  const invalid =
-    !title.trim() ||
-    !description.trim() ||
-    !placeName.trim();
+  function onPlaceChanged() {
+    const place = autocompleteRef.current?.getPlace();
+    if (!place) return;
+    if (place.name) setPlaceName(place.name);
+    if (place.geometry?.location) {
+      const pLat = place.geometry.location.lat();
+      const pLng = place.geometry.location.lng();
+      setLat(pLat);
+      setLng(pLng);
+      setMapLink(`https://www.google.com/maps/search/?api=1&query=${pLat},${pLng}`);
+    }
+  }
+
+  function applyTemplate(template: ListingTemplate) {
+    setTitle(template.title);
+    setDescription(template.description);
+    setType(template.type);
+    setCategory(template.category);
+    setPrice(template.price);
+    setPlaceName(template.placeName);
+    setMapLink(template.mapLink);
+    setIsPremium(template.isPremium);
+  }
+
+  function saveTemplate() {
+    if (!templateName.trim()) return;
+    const newTemplate: ListingTemplate = {
+      id: Date.now().toString(),
+      name: templateName.trim(),
+      title, description, type, category, price, placeName, mapLink, isPremium,
+    };
+    const updated = [...templates, newTemplate];
+    localStorage.setItem("ceylonify_templates", JSON.stringify(updated));
+    setTemplates(updated);
+    setTemplateName("");
+    setShowTemplateSave(false);
+    setTemplateSaved(true);
+    setTimeout(() => setTemplateSaved(false), 3000);
+  }
+
+  function deleteTemplate(id: string) {
+    const updated = templates.filter((t) => t.id !== id);
+    localStorage.setItem("ceylonify_templates", JSON.stringify(updated));
+    setTemplates(updated);
+  }
+
+  const invalid = !title.trim() || !description.trim() || !placeName.trim();
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -83,15 +163,10 @@ export function CreateListing() {
           body: formData,
         });
 
-        if (!uploadRes.ok) {
-          throw new Error("Failed to upload image. Please try again.");
-        }
+        if (!uploadRes.ok) throw new Error("Failed to upload image. Please try again.");
 
         const uploadData = await uploadRes.json();
-        // The backend returns a relative url like "/uploads/1234.png"
-        // In local development, we prefix with our server base url to form a full URL
         finalImageUrl = "http://localhost:3000" + uploadData.url;
-        
         setUploading(false);
       }
 
@@ -108,7 +183,7 @@ export function CreateListing() {
             ...(finalImageUrl ? { imageUrl: finalImageUrl } : {}),
             ...(category ? { category } : {}),
             ...(price ? { price: Number(price) } : {}),
-            ...(startDateTime ? { startDateTime } : {}),
+            ...(startDateTime ? { startDateTime: startDateTime.toISOString() } : {}),
             isPremium,
           },
         },
@@ -134,6 +209,35 @@ export function CreateListing() {
     >
       <div className="mx-auto w-full max-w-2xl">
         <form onSubmit={onSubmit} className="space-y-6">
+
+          {/* Template Load Panel */}
+          {templates.length > 0 && (
+            <Card className="mb-6">
+              <h6 className="text-slate-400 text-sm mb-3 font-bold uppercase">Load from Template</h6>
+              <div className="space-y-2">
+                {templates.map((t) => (
+                  <div key={t.id} className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => applyTemplate(t)}
+                      className="flex-1 text-left px-3 py-2 text-sm text-slate-700 bg-slate-50 hover:bg-sky-50 hover:text-sky-700 rounded shadow-sm transition-colors font-medium"
+                    >
+                      {t.name}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteTemplate(t.id)}
+                      className="text-xs text-slate-400 hover:text-red-500 px-2 py-2 transition-colors"
+                      title="Delete template"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
           {/* Media */}
           <Card className="mb-6">
             <h6 className="text-slate-400 text-sm mb-6 font-bold uppercase">Media</h6>
@@ -142,11 +246,7 @@ export function CreateListing() {
                 <div className="mb-2 uppercase text-slate-600 text-xs font-bold">Cover Image</div>
                 <div className="mt-2 flex items-center gap-4">
                   {imagePreview ? (
-                    <img
-                      src={imagePreview}
-                      alt="Preview"
-                      className="h-24 w-24 rounded object-cover shadow"
-                    />
+                    <img src={imagePreview} alt="Preview" className="h-24 w-24 rounded object-cover shadow" />
                   ) : (
                     <div className="flex h-24 w-24 flex-col items-center justify-center rounded border-0 bg-slate-100 text-slate-400 shadow">
                       <span className="text-xl">📷</span>
@@ -176,7 +276,7 @@ export function CreateListing() {
 
           {/* Basic Info */}
           <Card className="mb-6">
-             <h6 className="text-slate-400 text-sm mb-6 font-bold uppercase">Basic Info</h6>
+            <h6 className="text-slate-400 text-sm mb-6 font-bold uppercase">Basic Info</h6>
             <div className="space-y-4">
               <Input
                 label="Title"
@@ -208,9 +308,7 @@ export function CreateListing() {
                   <span className="text-xs font-semibold text-slate-400">{description.length}/1200</span>
                 </div>
                 {aiApplied && (
-                  <p className="mt-1 text-xs text-violet-500 font-semibold">
-                    AI suggestion applied — edit freely.
-                  </p>
+                  <p className="mt-1 text-xs text-violet-500 font-semibold">AI suggestion applied — edit freely.</p>
                 )}
               </label>
 
@@ -246,6 +344,13 @@ export function CreateListing() {
                     <option value="WELLNESS">Wellness</option>
                     <option value="BEACH">Beach</option>
                     <option value="HERITAGE">Heritage</option>
+                    <option value="PARTY">Party</option>
+                    <option value="NIGHTLIFE">Nightlife</option>
+                    <option value="SPORTS">Sports</option>
+                    <option value="ARTS">Arts &amp; Crafts</option>
+                    <option value="MUSIC">Music</option>
+                    <option value="FESTIVAL">Festival</option>
+                    <option value="FAMILY">Family</option>
                   </select>
                 </label>
               </div>
@@ -265,9 +370,9 @@ export function CreateListing() {
             </div>
           </Card>
 
-          {/* Pricing & Date */}
+          {/* Pricing & Schedule */}
           <Card className="mb-6">
-             <h6 className="text-slate-400 text-sm mb-6 font-bold uppercase">Pricing & Schedule</h6>
+            <h6 className="text-slate-400 text-sm mb-6 font-bold uppercase">Pricing & Schedule</h6>
             <div className="grid gap-4 sm:grid-cols-2">
               <Input
                 label="Price (LKR)"
@@ -280,11 +385,18 @@ export function CreateListing() {
                 <div className="mb-2 uppercase text-slate-600 text-xs font-bold">
                   Start Date & Time <span className="text-slate-400 normal-case">(optional)</span>
                 </div>
-                <input
-                  type="datetime-local"
+                <DatePicker
+                  selected={startDateTime}
+                  onChange={(date) => setStartDateTime(date)}
+                  showTimeSelect
+                  timeFormat="HH:mm"
+                  timeIntervals={15}
+                  dateFormat="MMM d, yyyy h:mm aa"
+                  minDate={new Date()}
+                  placeholderText="Pick a date & time"
                   className="border-0 px-3 py-3 text-slate-600 bg-white rounded text-sm shadow focus:outline-none focus:ring w-full ease-linear transition-all duration-150"
-                  value={startDateTime}
-                  onChange={(e) => setStartDateTime(e.target.value)}
+                  wrapperClassName="w-full"
+                  calendarClassName="shadow-lg rounded-xl"
                 />
               </label>
             </div>
@@ -308,6 +420,24 @@ export function CreateListing() {
                 onChange={(e) => setMapLink(e.target.value)}
                 placeholder="https://maps.app.goo.gl/..."
               />
+              {mapsLoaded && (
+                <label className="block">
+                  <div className="mb-2 uppercase text-slate-600 text-xs font-bold">
+                    Search by Place Name
+                  </div>
+                  <Autocomplete
+                    onLoad={(ref) => { autocompleteRef.current = ref; }}
+                    onPlaceChanged={onPlaceChanged}
+                    options={{ componentRestrictions: { country: "lk" } }}
+                  >
+                    <input
+                      type="text"
+                      placeholder="Search for a place in Sri Lanka…"
+                      className="border-0 px-3 py-3 placeholder-slate-300 text-slate-600 bg-white rounded text-sm shadow focus:outline-none focus:ring w-full ease-linear transition-all duration-150"
+                    />
+                  </Autocomplete>
+                </label>
+              )}
               <p className="text-xs text-slate-500">
                 Click anywhere on the map to drop a pin, or drag the marker to fine-tune.
               </p>
@@ -340,7 +470,7 @@ export function CreateListing() {
             </div>
           </Card>
 
-          {/* Error / Success */}
+          {/* Error / Success / Template feedback */}
           {err && (
             <div className="rounded border-0 bg-red-100 px-4 py-3 text-sm font-bold shadow text-red-800">{err}</div>
           )}
@@ -349,12 +479,46 @@ export function CreateListing() {
               ✅ Listing created! Redirecting...
             </div>
           )}
+          {templateSaved && (
+            <div className="rounded border-0 bg-violet-100 px-4 py-3 text-sm font-bold shadow text-violet-800">
+              💾 Template saved!
+            </div>
+          )}
 
           {/* Actions */}
-          <div className="flex gap-3 pb-10">
-            <Button type="submit" disabled={loading || uploading || invalid}>
-              {uploading ? "Uploading Image..." : loading ? "Creating…" : "Create Listing"}
-            </Button>
+          <div className="space-y-3 pb-10">
+            <div className="flex gap-3 flex-wrap">
+              <Button type="submit" disabled={loading || uploading || invalid}>
+                {uploading ? "Uploading Image..." : loading ? "Creating…" : "Create Listing"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => { setShowTemplateSave(!showTemplateSave); setTemplateName(""); }}
+                disabled={invalid}
+              >
+                💾 Save as Template
+              </Button>
+            </div>
+            {showTemplateSave && (
+              <div className="flex gap-2 items-center flex-wrap">
+                <input
+                  type="text"
+                  value={templateName}
+                  onChange={(e) => setTemplateName(e.target.value)}
+                  placeholder="Template name (e.g. Weekly Beach Party)"
+                  className="flex-1 min-w-0 border-0 px-3 py-2 text-slate-600 bg-white rounded text-sm shadow focus:outline-none focus:ring ease-linear transition-all duration-150"
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); saveTemplate(); } }}
+                  autoFocus
+                />
+                <Button type="button" onClick={saveTemplate} disabled={!templateName.trim()}>
+                  Save
+                </Button>
+                <Button type="button" variant="ghost" onClick={() => setShowTemplateSave(false)}>
+                  Cancel
+                </Button>
+              </div>
+            )}
           </div>
         </form>
       </div>

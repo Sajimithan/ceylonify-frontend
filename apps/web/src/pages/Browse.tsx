@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useQuery, useLazyQuery, useMutation } from "@apollo/client/react";
 import { useNavigate } from "react-router-dom";
 import { GoogleMap, Marker, InfoWindow, useJsApiLoader } from "@react-google-maps/api";
+import { MAPS_LIBRARIES } from "../lib/googleMaps";
 import { DashboardLayout } from "../layouts/DashboardLayout";
 import { Badge } from "../ui/Badge";
 import { ME_QUERY, SEARCH_LISTINGS, NEARBY_LISTINGS_QUERY } from "./browse.gql";
@@ -47,6 +48,7 @@ export function Browse() {
 
   const { isLoaded: mapsLoaded } = useJsApiLoader({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string,
+    libraries: MAPS_LIBRARIES,
   });
 
   const { data: meData } = useQuery(ME_QUERY);

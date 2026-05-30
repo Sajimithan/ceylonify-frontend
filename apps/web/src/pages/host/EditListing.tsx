@@ -3,6 +3,7 @@ import { gql } from "@apollo/client";
 import { useMutation, useQuery } from "@apollo/client/react";
 import { GET_LISTING, UPDATE_LISTING } from "./listings.gql";
 import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
+import { MAPS_LIBRARIES } from "../../lib/googleMaps";
 
 const ENHANCE_DESCRIPTION = gql`
   mutation EnhanceDescriptionEdit($text: String!) {
@@ -55,6 +56,7 @@ export function EditListing() {
   const [enhance, { loading: enhancing }] = useMutation(ENHANCE_DESCRIPTION);
   const { isLoaded: mapsLoaded } = useJsApiLoader({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string,
+    libraries: MAPS_LIBRARIES,
   });
 
   async function handleEnhance() {
