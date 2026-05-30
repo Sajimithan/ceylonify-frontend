@@ -247,9 +247,12 @@ export default function MapScreen() {
   }
 
   function handleAiPlan(listing: any) {
-    const planWith = encodeURIComponent(listing.title);
-    const planPlace = encodeURIComponent(listing.placeName ?? '');
-    router.push(`/(tabs)/saved?planWith=${planWith}&planPlace=${planPlace}` as any);
+    const params = new URLSearchParams({
+      planWith: listing.title,
+      planPlace: listing.placeName ?? '',
+      listingId: listing.id,
+    });
+    router.push(`/(tabs)/saved?${params.toString()}` as any);
   }
 
   return (
