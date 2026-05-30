@@ -37,6 +37,7 @@ module.exports = {
             'Allow Ceylonify to use your location to show nearby experiences.',
         },
       ],
+      '@react-native-community/datetimepicker',
     ],
     experiments: {
       typedRoutes: true,

@@ -10,6 +10,7 @@ import {
 } from 'lucide-react-native';
 import { useGraphQL, gqlFetch } from '../../src/hooks/useGraphQL';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 const API_BASE = (process.env.EXPO_PUBLIC_API_URL ?? 'http://10.0.2.2:3000/graphql').replace('/graphql', '');
 
@@ -29,7 +30,7 @@ function cleanAiText(text: string): string {
 const SAVED_LISTINGS_QUERY = `
   query SavedListings {
     savedListings {
-      id title description type category price placeName imageUrl createdAt
+      id title description type category price placeName imageUrl startDateTime createdAt
     }
   }
 `;
@@ -48,7 +49,10 @@ const ADD_ITINERARY = `mutation AddToItinerary($listingId: ID!, $plannedDate: St
 const REMOVE_ITINERARY = `mutation RemoveFromItinerary($itemId: ID!) { removeFromItinerary(itemId: $itemId) }`;
 const PLAN_ITINERARY_MUTATION = `
   mutation PlanItinerary($prompt: String!, $history: [ChatMessageInput!], $listingId: ID) {
-    planItinerary(prompt: $prompt, history: $history, listingId: $listingId)
+    planItinerary(prompt: $prompt, history: $history, listingId: $listingId) {
+      text
+      listings { id title imageUrl placeName price type }
+    }
   }
 `;
 const SAVE_CHAT_MUTATION = `
@@ -70,7 +74,8 @@ const SUGGESTION_CHIPS = [
   '7-day honeymoon in Sri Lanka',
 ];
 
-type ChatMessage = { role: 'user' | 'assistant'; content: string };
+type PlanListing = { id: string; title: string; imageUrl?: string | null; placeName?: string | null; price?: string | null; type: string };
+type ChatMessage = { role: 'user' | 'assistant'; content: string; listings?: PlanListing[] };
 
 function groupByDate(items: any[]) {
   const map: Record<string, any[]> = {};
@@ -84,8 +89,12 @@ function groupByDate(items: any[]) {
   return Object.entries(map).sort(([a], [b]) => new Date(a).getTime() - new Date(b).getTime());
 }
 
-// Render AI message with styled day headers and bullet points
-function AiMessageText({ text }: { text: string }) {
+// Render AI message with styled day headers, bullet points, and interactive listing cards
+function AiMessageText({ text, listings }: { text: string; listings?: PlanListing[] }) {
+  const router = useRouter();
+  const listingMap = new Map<string, PlanListing>();
+  listings?.forEach((l) => listingMap.set(l.title.toLowerCase(), l));
+
   const clean = cleanAiText(text);
   const lines = clean.split('\n');
   return (
@@ -100,7 +109,35 @@ function AiMessageText({ text }: { text: string }) {
           return <Text key={i} style={aiMsgStyles.dayHeader}>{trimmed}</Text>;
         }
         if (isLabel) {
-          return <Text key={i} style={aiMsgStyles.label}>{trimmed}</Text>;
+          const bookMatch = trimmed.match(/^\[Book on Ceylonify:\s*([^—\]]+)/i);
+          const searchKey = bookMatch?.[1]?.trim().toLowerCase();
+          const matchedListing = searchKey
+            ? listingMap.get(searchKey) ??
+              [...listingMap.entries()].find(([k]) => k.includes(searchKey) || searchKey.includes(k))?.[1]
+            : undefined;
+          return (
+            <View key={i}>
+              <Text style={aiMsgStyles.label}>{trimmed}</Text>
+              {matchedListing && (
+                <TouchableOpacity
+                  style={aiCardStyles.card}
+                  activeOpacity={0.8}
+                  onPress={() => router.push(`/listing/${matchedListing.id}` as any)}
+                >
+                  {matchedListing.imageUrl
+                    ? <Image source={{ uri: fixImageUrl(matchedListing.imageUrl) ?? undefined }} style={aiCardStyles.image} />
+                    : <View style={[aiCardStyles.image, aiCardStyles.imagePlaceholder]}><Text style={{ fontSize: 20 }}>🏝️</Text></View>
+                  }
+                  <View style={{ flex: 1 }}>
+                    <Text style={aiCardStyles.title} numberOfLines={1}>{matchedListing.title}</Text>
+                    {matchedListing.placeName ? <Text style={aiCardStyles.meta} numberOfLines={1}>📍 {matchedListing.placeName}</Text> : null}
+                    {matchedListing.price ? <Text style={aiCardStyles.price}>LKR {matchedListing.price}</Text> : null}
+                  </View>
+                  <ChevronRight size={14} color="#0EA5A4" />
+                </TouchableOpacity>
+              )}
+            </View>
+          );
         }
         if (isBullet) {
           return <Text key={i} style={aiMsgStyles.bullet}>{trimmed}</Text>;
@@ -116,6 +153,19 @@ const aiMsgStyles = StyleSheet.create({
   bullet: { fontSize: 13, color: '#374151', lineHeight: 20, marginLeft: 4 },
   label: { fontSize: 13, color: '#0EA5A4', fontWeight: '600', marginTop: 4 },
   body: { fontSize: 13, color: '#374151', lineHeight: 20 },
+});
+
+const aiCardStyles = StyleSheet.create({
+  card: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: '#F7FAFC', borderRadius: 10, borderWidth: 1, borderColor: '#E5E7EB',
+    marginTop: 6, marginBottom: 4, padding: 8,
+  },
+  image: { width: 52, height: 52, borderRadius: 8, flexShrink: 0 },
+  imagePlaceholder: { backgroundColor: '#E0F6F6', alignItems: 'center', justifyContent: 'center' },
+  title: { fontSize: 12, fontWeight: 'bold', color: '#0B1220', marginBottom: 1 },
+  meta: { fontSize: 11, color: '#667085', marginBottom: 1 },
+  price: { fontSize: 11, fontWeight: '600', color: '#0EA5A4' },
 });
 
 export default function SavedScreen() {
@@ -157,6 +207,13 @@ export default function SavedScreen() {
   // Saved chats list
   const [savedChatsVisible, setSavedChatsVisible] = useState(false);
   const [deletingChat, setDeletingChat] = useState<string | null>(null);
+
+  // Date picker state
+  const [plannedDateObj, setPlannedDateObj] = useState<Date>(new Date());
+  const [planDateObj, setPlanDateObj] = useState<Date>(new Date());
+  const [showPlannedDatePicker, setShowPlannedDatePicker] = useState(false);
+  const [showPlanDatePicker, setShowPlanDatePicker] = useState(false);
+  const [planTargetListingId, setPlanTargetListingId] = useState<string | null>(null);
 
   const { data, loading, error, refetch } = useGraphQL<{ savedListings: any[] }>(SAVED_LISTINGS_QUERY);
   const { data: itineraryData, loading: itineraryLoading, refetch: refetchItinerary } = useGraphQL<{ myItinerary: any[] }>(MY_ITINERARY_QUERY);
@@ -206,7 +263,9 @@ export default function SavedScreen() {
 
   function openAddModal(listing: any) {
     setAddTargetListing(listing);
-    setPlannedDate(new Date().toISOString().slice(0, 10));
+    const defaultDate = listing.startDateTime ? new Date(listing.startDateTime) : new Date();
+    setPlannedDateObj(defaultDate);
+    setPlannedDate(defaultDate.toISOString().slice(0, 10));
     setNote('');
     setAddModalVisible(true);
   }
@@ -245,13 +304,14 @@ export default function SavedScreen() {
     setAiLoading(true);
     setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 100);
     try {
-      const result = await gqlFetch<{ planItinerary: string }>(PLAN_ITINERARY_MUTATION, {
+      const result = await gqlFetch<{ planItinerary: { text: string; listings: PlanListing[] } }>(PLAN_ITINERARY_MUTATION, {
         prompt,
         history,
         listingId: contextListingId || undefined,
       });
-      const reply = cleanAiText(result?.planItinerary ?? 'Sorry, no response received.');
-      setChatMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
+      const planResult = result?.planItinerary;
+      const reply = cleanAiText(planResult?.text ?? 'Sorry, no response received.');
+      setChatMessages((prev) => [...prev, { role: 'assistant', content: reply, listings: planResult?.listings ?? [] }]);
     } catch {
       setChatMessages((prev) => [...prev, { role: 'assistant', content: 'Sorry, something went wrong. Please try again.' }]);
     } finally {
@@ -268,30 +328,32 @@ export default function SavedScreen() {
   }
 
   // Add AI plan to itinerary
-  function promptAddPlanToItinerary(planText: string) {
-    if (!contextListingId && savedListings.length === 0) {
+  function promptAddPlanToItinerary(planText: string, msgListings?: PlanListing[]) {
+    const targetId = contextListingId ?? msgListings?.[0]?.id ?? savedListings[0]?.id ?? null;
+    if (!targetId) {
       Alert.alert('No Listing', 'Save a listing or open one from the map to link this plan to your itinerary.');
       return;
     }
+    setPlanTargetListingId(targetId);
     setPlanToAdd(planText);
-    setPlanDate(new Date().toISOString().slice(0, 10));
+    const today = new Date();
+    setPlanDateObj(today);
+    setPlanDate(today.toISOString().slice(0, 10));
     setAddPlanModalVisible(true);
   }
 
   async function submitAddPlan() {
-    if (!planDate || !planToAdd) return;
-    // Use context listing (from map) or first saved listing
-    const targetId = contextListingId || savedListings[0]?.id;
-    if (!targetId) return;
+    if (!planDate || !planToAdd || !planTargetListingId) return;
     setAddingPlan(true);
     try {
       await gqlFetch(ADD_ITINERARY, {
-        listingId: targetId,
+        listingId: planTargetListingId,
         plannedDate: new Date(planDate).toISOString(),
         note: planToAdd.slice(0, 500),
       });
       setAddPlanModalVisible(false);
       setPlanToAdd(null);
+      setPlanTargetListingId(null);
       await refetchItinerary();
       Alert.alert('✅ Added!', 'Your AI plan has been saved to the itinerary.');
     } catch {
@@ -414,16 +476,22 @@ export default function SavedScreen() {
                   const imageUrl = item.listingImageUrl ? fixImageUrl(item.listingImageUrl) : null;
                   return (
                     <View key={item.id} style={styles.itineraryItem}>
-                      {imageUrl
-                        ? <Image source={{ uri: imageUrl }} style={styles.itineraryImage} />
-                        : <View style={styles.itineraryIcon}><MapPin size={24} color="#0EA5A4" /></View>
-                      }
-                      <View style={styles.itineraryContent}>
-                        <Text style={styles.itineraryTitle} numberOfLines={1}>{title}</Text>
-                        {item.listingPlaceName ? <Text style={styles.itineraryMeta} numberOfLines={1}>📍 {item.listingPlaceName}</Text> : null}
-                        {item.listingType ? <Text style={styles.itineraryType}>{item.listingType}</Text> : null}
-                        {item.note ? <Text style={styles.itineraryNote} numberOfLines={2}>{item.note}</Text> : null}
-                      </View>
+                      <TouchableOpacity
+                        style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
+                        activeOpacity={0.75}
+                        onPress={() => router.push(`/listing/${item.listingId}` as any)}
+                      >
+                        {imageUrl
+                          ? <Image source={{ uri: imageUrl }} style={styles.itineraryImage} />
+                          : <View style={styles.itineraryIcon}><MapPin size={24} color="#0EA5A4" /></View>
+                        }
+                        <View style={styles.itineraryContent}>
+                          <Text style={styles.itineraryTitle} numberOfLines={1}>{title}</Text>
+                          {item.listingPlaceName ? <Text style={styles.itineraryMeta} numberOfLines={1}>📍 {item.listingPlaceName}</Text> : null}
+                          {item.listingType ? <Text style={styles.itineraryType}>{item.listingType}</Text> : null}
+                          {item.note ? <Text style={styles.itineraryNote} numberOfLines={2}>{item.note}</Text> : null}
+                        </View>
+                      </TouchableOpacity>
                       <TouchableOpacity onPress={() => handleRemoveFromItinerary(item.id)} disabled={removingItinerary === item.id} style={styles.removeItineraryBtn}>
                         {removingItinerary === item.id ? <ActivityIndicator size="small" color="#EF4444" /> : <Trash2 size={16} color="#EF4444" />}
                       </TouchableOpacity>
@@ -505,8 +573,25 @@ export default function SavedScreen() {
             </View>
             {addTargetListing && <Text style={modalStyles.listingName} numberOfLines={1}>{addTargetListing.title}</Text>}
             <Text style={modalStyles.label}>Planned Date</Text>
-            <TextInput style={modalStyles.input} value={plannedDate} onChangeText={setPlannedDate}
-              placeholder="YYYY-MM-DD" placeholderTextColor="#9CA3AF" keyboardType="numeric" />
+            <TouchableOpacity
+              style={[modalStyles.input, { justifyContent: 'center' }]}
+              onPress={() => setShowPlannedDatePicker(true)}
+            >
+              <Text style={{ fontSize: 14, color: '#0B1220' }}>
+                {plannedDateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+              </Text>
+            </TouchableOpacity>
+            {showPlannedDatePicker && (
+              <DateTimePicker
+                value={plannedDateObj}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={(_, date) => {
+                  if (Platform.OS === 'android') setShowPlannedDatePicker(false);
+                  if (date) { setPlannedDateObj(date); setPlannedDate(date.toISOString().slice(0, 10)); }
+                }}
+              />
+            )}
             <Text style={modalStyles.label}>Note (optional)</Text>
             <TextInput style={[modalStyles.input, { height: 80, textAlignVertical: 'top' }]}
               value={note} onChangeText={setNote}
@@ -529,8 +614,25 @@ export default function SavedScreen() {
             </View>
             <Text style={modalStyles.subText}>Choose a start date for this AI-generated plan.</Text>
             <Text style={modalStyles.label}>Start Date</Text>
-            <TextInput style={modalStyles.input} value={planDate} onChangeText={setPlanDate}
-              placeholder="YYYY-MM-DD" placeholderTextColor="#9CA3AF" keyboardType="numeric" />
+            <TouchableOpacity
+              style={[modalStyles.input, { justifyContent: 'center' }]}
+              onPress={() => setShowPlanDatePicker(true)}
+            >
+              <Text style={{ fontSize: 14, color: '#0B1220' }}>
+                {planDateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+              </Text>
+            </TouchableOpacity>
+            {showPlanDatePicker && (
+              <DateTimePicker
+                value={planDateObj}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={(_, date) => {
+                  if (Platform.OS === 'android') setShowPlanDatePicker(false);
+                  if (date) { setPlanDateObj(date); setPlanDate(date.toISOString().slice(0, 10)); }
+                }}
+              />
+            )}
             <TouchableOpacity style={[modalStyles.submitBtn, (!planDate || addingPlan) && { opacity: 0.5 }]}
               onPress={submitAddPlan} disabled={!planDate || addingPlan}>
               <Text style={modalStyles.submitText}>{addingPlan ? 'Saving…' : '📅 Save to Itinerary'}</Text>
@@ -651,14 +753,14 @@ export default function SavedScreen() {
                 <View style={[chatStyles.bubble, msg.role === 'user' ? chatStyles.userBubble : chatStyles.assistantBubble]}>
                   {msg.role === 'user'
                     ? <Text style={chatStyles.userText}>{msg.content}</Text>
-                    : <AiMessageText text={msg.content} />
+                    : <AiMessageText text={msg.content} listings={msg.listings} />
                   }
                 </View>
                 {/* Add to itinerary button after last AI message */}
                 {msg.role === 'assistant' && idx === chatMessages.length - 1 && !aiLoading && (
                   <TouchableOpacity
                     style={chatStyles.addPlanBtn}
-                    onPress={() => promptAddPlanToItinerary(msg.content)}
+                    onPress={() => promptAddPlanToItinerary(msg.content, msg.listings)}
                   >
                     <Calendar size={13} color="#0EA5A4" />
                     <Text style={chatStyles.addPlanBtnText}>📅 Save this plan to Itinerary</Text>
