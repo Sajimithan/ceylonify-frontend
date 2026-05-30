@@ -12,6 +12,22 @@ type UserRecord = {
   email?: string;
   role: string;
   createdAt: string;
+  badgeLevel?: string;
+  approvedCount?: number;
+};
+
+const BADGE_EMOJI: Record<string, string> = {
+  BRONZE: "🥉",
+  SILVER: "🥈",
+  GOLD: "🥇",
+  DIAMOND: "💎",
+};
+
+const BADGE_STYLE: Record<string, string> = {
+  BRONZE: "bg-amber-50 text-amber-700 border-amber-200",
+  SILVER: "bg-slate-100 text-slate-600 border-slate-300",
+  GOLD: "bg-yellow-50 text-yellow-700 border-yellow-300",
+  DIAMOND: "bg-cyan-50 text-cyan-700 border-cyan-300",
 };
 
 type UsersData = {
@@ -164,17 +180,26 @@ export function AdminUsers() {
                           <option value="ADMIN">ADMIN</option>
                         </select>
                       ) : (
-                        <span
-                          className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide
-                            ${u.role === "ADMIN"
-                              ? "bg-slate-800 text-white"
-                              : u.role === "HOST"
-                              ? "bg-violet-100 text-violet-700"
-                              : "bg-brand-100 text-brand-700"
-                            }`}
-                        >
-                          {u.role}
-                        </span>
+                        <div className="flex flex-col gap-1.5">
+                          <span
+                            className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide w-fit
+                              ${u.role === "ADMIN"
+                                ? "bg-slate-800 text-white"
+                                : u.role === "HOST"
+                                ? "bg-violet-100 text-violet-700"
+                                : "bg-brand-100 text-brand-700"
+                              }`}
+                          >
+                            {u.role}
+                          </span>
+                          {u.badgeLevel && u.badgeLevel !== "NONE" && (
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border w-fit ${BADGE_STYLE[u.badgeLevel] ?? ""}`}
+                            >
+                              {BADGE_EMOJI[u.badgeLevel]} {u.badgeLevel[0] + u.badgeLevel.slice(1).toLowerCase()} Host
+                            </span>
+                          )}
+                        </div>
                       )}
                     </td>
 

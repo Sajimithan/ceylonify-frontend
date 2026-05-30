@@ -16,24 +16,26 @@ import {
   ClockIcon,
   FlagIcon,
   ShieldCheckIcon,
+  DocumentCheckIcon,
   ArrowLeftStartOnRectangleIcon,
   Bars3Icon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 
 const NAV_ICONS: Record<string, React.ElementType> = {
-  "/browse":           MagnifyingGlassIcon,
-  "/saved":            BookmarkIcon,
-  "/dashboard":        HomeIcon,
-  "/host/create":      PlusCircleIcon,
-  "/host/analytics":   ChartBarIcon,
-  "/host/profile":     UserIcon,
-  "/admin":            ShieldCheckIcon,
-  "/admin/pending":    ClipboardDocumentListIcon,
-  "/admin/listings":   ClipboardDocumentListIcon,
-  "/admin/users":      UsersIcon,
-  "/admin/reports":    FlagIcon,
-  "/admin/audit-logs": ClockIcon,
+  "/browse":                   MagnifyingGlassIcon,
+  "/saved":                    BookmarkIcon,
+  "/dashboard":                HomeIcon,
+  "/host/create":              PlusCircleIcon,
+  "/host/analytics":           ChartBarIcon,
+  "/host/profile":             UserIcon,
+  "/admin":                    ShieldCheckIcon,
+  "/admin/pending":            ClipboardDocumentListIcon,
+  "/admin/listings":           ClipboardDocumentListIcon,
+  "/admin/users":              UsersIcon,
+  "/admin/host-applications":  DocumentCheckIcon,
+  "/admin/reports":            FlagIcon,
+  "/admin/audit-logs":         ClockIcon,
 };
 
 function NavLink({
@@ -183,6 +185,7 @@ export function DashboardLayout({
                 <NavLink to="/admin/pending" onNav={closeSidebar}>Pending Moderation</NavLink>
                 <NavLink to="/admin/listings" onNav={closeSidebar}>All Listings</NavLink>
                 <NavLink to="/admin/users" onNav={closeSidebar}>User Management</NavLink>
+                <NavLink to="/admin/host-applications" onNav={closeSidebar}>Host Applications</NavLink>
                 <NavLink to="/admin/reports" onNav={closeSidebar}>Reports</NavLink>
                 <NavLink to="/admin/audit-logs" onNav={closeSidebar}>Audit Logs</NavLink>
                 <NavLink to="/host/profile" onNav={closeSidebar}>Profile & Settings</NavLink>

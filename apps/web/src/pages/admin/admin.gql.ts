@@ -25,6 +25,8 @@ export const ADMIN_ALL_USERS = gql`
       email
       role
       createdAt
+      badgeLevel
+      approvedCount
     }
   }
 `;

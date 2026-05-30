@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { gql } from "@apollo/client";
 import { useQuery } from "@apollo/client/react";
 import {
   updateProfile,
@@ -13,6 +14,22 @@ import { DashboardLayout } from "../../layouts/DashboardLayout";
 import { Input } from "../../ui/Input";
 import { Button } from "../../ui/Button";
 import { ME_QUERY } from "../browse.gql";
+
+const HOST_BADGE = gql`
+  query HostBadge($firebaseUid: String!) {
+    hostBadge(firebaseUid: $firebaseUid) {
+      approvedCount
+      badgeLevel
+    }
+  }
+`;
+
+const BADGE_DISPLAY: Record<string, { emoji: string; label: string; style: string }> = {
+  BRONZE:  { emoji: "🥉", label: "Bronze Host",  style: "from-amber-50 to-amber-100 border-amber-200 text-amber-700" },
+  SILVER:  { emoji: "🥈", label: "Silver Host",  style: "from-slate-50 to-slate-100 border-slate-300 text-slate-600" },
+  GOLD:    { emoji: "🥇", label: "Gold Host",    style: "from-yellow-50 to-yellow-100 border-yellow-300 text-yellow-700" },
+  DIAMOND: { emoji: "💎", label: "Diamond Host", style: "from-cyan-50 to-cyan-100 border-cyan-300 text-cyan-700" },
+};
 
 function Avatar({
   name,
@@ -49,6 +66,12 @@ function Avatar({
 export function HostProfile() {
   const { user } = useAuth();
   const { data: meData } = useQuery(ME_QUERY);
+  const { data: badgeData } = useQuery<{
+    hostBadge: { approvedCount: number; badgeLevel: string };
+  }>(HOST_BADGE, {
+    variables: { firebaseUid: user?.uid ?? "" },
+    skip: !user?.uid,
+  });
 
   // ── Profile photo ─────────────────────────────────────────────────────────
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -259,6 +282,27 @@ export function HostProfile() {
             </div>
           </div>
         </div>
+
+        {/* Badge card */}
+        {badgeData?.hostBadge && badgeData.hostBadge.badgeLevel !== "NONE" && (() => {
+          const bd = BADGE_DISPLAY[badgeData.hostBadge.badgeLevel];
+          if (!bd) return null;
+          return (
+            <div className={`rounded-xl border bg-gradient-to-br ${bd.style} p-5 flex items-center gap-4`}>
+              <div className="text-5xl flex-shrink-0">{bd.emoji}</div>
+              <div>
+                <div className={`text-xs font-bold uppercase tracking-wide mb-0.5 opacity-60`}>
+                  Host Achievement
+                </div>
+                <div className="text-xl font-bold">{bd.label}</div>
+                <div className="text-sm font-medium mt-0.5 opacity-70">
+                  {badgeData.hostBadge.approvedCount} approved listing
+                  {badgeData.hostBadge.approvedCount !== 1 ? "s" : ""}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Edit display name */}
         <div className="bg-white rounded-xl shadow p-6">
