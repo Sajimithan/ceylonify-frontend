@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery } from "@apollo/client/react";
 import {
   updateProfile,
@@ -6,22 +6,41 @@ import {
   EmailAuthProvider,
   reauthenticateWithCredential,
 } from "firebase/auth";
-import { auth } from "../../auth/firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { auth, storage } from "../../auth/firebase";
 import { useAuth } from "../../auth/useAuth";
 import { DashboardLayout } from "../../layouts/DashboardLayout";
 import { Input } from "../../ui/Input";
 import { Button } from "../../ui/Button";
 import { ME_QUERY } from "../browse.gql";
 
-function Avatar({ name, email }: { name?: string | null; email?: string | null }) {
+function Avatar({
+  name,
+  email,
+  photoURL,
+}: {
+  name?: string | null;
+  email?: string | null;
+  photoURL?: string | null;
+}) {
   const initials = name
     ? name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2)
     : email
     ? email[0].toUpperCase()
     : "?";
 
+  if (photoURL) {
+    return (
+      <img
+        src={photoURL}
+        alt="Profile"
+        className="w-20 h-20 rounded-full object-cover shadow-lg ring-2 ring-brand-200"
+      />
+    );
+  }
+
   return (
-    <div className="w-20 h-20 rounded-full bg-sky-500 flex items-center justify-center text-white text-2xl font-bold shadow-lg select-none">
+    <div className="w-20 h-20 rounded-full bg-brand-500 flex items-center justify-center text-white text-2xl font-bold shadow-lg select-none">
       {initials}
     </div>
   );
@@ -30,6 +49,44 @@ function Avatar({ name, email }: { name?: string | null; email?: string | null }
 export function HostProfile() {
   const { user } = useAuth();
   const { data: meData } = useQuery(ME_QUERY);
+
+  // ── Profile photo ─────────────────────────────────────────────────────────
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoMsg, setPhotoMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [localPhotoURL, setLocalPhotoURL] = useState<string | null>(null);
+
+  async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    if (!file.type.startsWith("image/")) {
+      setPhotoMsg({ ok: false, text: "Please select an image file." });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setPhotoMsg({ ok: false, text: "Image must be smaller than 5 MB." });
+      return;
+    }
+
+    setPhotoUploading(true);
+    setPhotoMsg(null);
+    try {
+      const storageRef = ref(storage, `profile-pictures/${user.uid}`);
+      await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(storageRef);
+      await updateProfile(user, { photoURL: downloadURL });
+      setLocalPhotoURL(downloadURL);
+      setPhotoMsg({ ok: true, text: "Profile photo updated." });
+    } catch {
+      setPhotoMsg({ ok: false, text: "Upload failed. Please try again." });
+    } finally {
+      setPhotoUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  const currentPhotoURL = localPhotoURL ?? user?.photoURL;
 
   // ── Display name ──────────────────────────────────────────────────────────
   const [displayName, setDisplayName] = useState(user?.displayName ?? "");
@@ -110,7 +167,43 @@ export function HostProfile() {
         {/* Identity card */}
         <div className="bg-white rounded-xl shadow p-6">
           <div className="flex items-center gap-5 mb-6">
-            <Avatar name={user?.displayName} email={user?.email} />
+            {/* Avatar with upload overlay */}
+            <div className="relative flex-shrink-0 group">
+              <Avatar
+                name={user?.displayName}
+                email={user?.email}
+                photoURL={currentPhotoURL}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={photoUploading}
+                className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity disabled:cursor-wait"
+                title="Change photo"
+              >
+                {photoUploading ? (
+                  <svg className="w-5 h-5 text-white animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
+                  </svg>
+                )}
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handlePhotoChange}
+              />
+              <p className="text-[10px] text-slate-400 text-center mt-1.5 font-medium">
+                {photoUploading ? "Uploading…" : "Click to change"}
+              </p>
+            </div>
             <div>
               <div className="text-lg font-bold text-slate-700">
                 {user?.displayName || "No display name set"}
@@ -136,6 +229,16 @@ export function HostProfile() {
               </div>
             </div>
           </div>
+
+          {photoMsg && (
+            <div
+              className={`mb-4 rounded-lg px-4 py-3 text-sm font-semibold ${
+                photoMsg.ok ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
+              }`}
+            >
+              {photoMsg.text}
+            </div>
+          )}
 
           <div className="grid gap-3 sm:grid-cols-2 text-sm">
             <div className="bg-slate-50 rounded-lg px-4 py-3">

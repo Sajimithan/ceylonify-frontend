@@ -1,23 +1,74 @@
+import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { auth } from "../auth/firebase";
 import { signOut } from "firebase/auth";
 import { useAuth } from "../auth/useAuth";
 import { isAdminEmail } from "../auth/admin";
+import {
+  HomeIcon,
+  MagnifyingGlassIcon,
+  BookmarkIcon,
+  PlusCircleIcon,
+  ChartBarIcon,
+  UserIcon,
+  UsersIcon,
+  ClipboardDocumentListIcon,
+  ClockIcon,
+  FlagIcon,
+  ShieldCheckIcon,
+  ArrowLeftStartOnRectangleIcon,
+  Bars3Icon,
+  XMarkIcon,
+} from "@heroicons/react/24/outline";
 
-function NavLink({ to, children }: { to: string; children: React.ReactNode }) {
+const NAV_ICONS: Record<string, React.ElementType> = {
+  "/browse":           MagnifyingGlassIcon,
+  "/saved":            BookmarkIcon,
+  "/dashboard":        HomeIcon,
+  "/host/create":      PlusCircleIcon,
+  "/host/analytics":   ChartBarIcon,
+  "/host/profile":     UserIcon,
+  "/admin":            ShieldCheckIcon,
+  "/admin/pending":    ClipboardDocumentListIcon,
+  "/admin/listings":   ClipboardDocumentListIcon,
+  "/admin/users":      UsersIcon,
+  "/admin/reports":    FlagIcon,
+  "/admin/audit-logs": ClockIcon,
+};
+
+function NavLink({
+  to,
+  children,
+  onNav,
+}: {
+  to: string;
+  children: React.ReactNode;
+  onNav?: () => void;
+}) {
   const { pathname } = useLocation();
-  const active = pathname === to || (to !== "/dashboard" && pathname.startsWith(to));
+  const active =
+    pathname === to || (to !== "/dashboard" && pathname.startsWith(to));
+  const Icon = NAV_ICONS[to] ?? HomeIcon;
+
   return (
-    <li className="items-center">
+    <li>
       <Link
         to={to}
-        className={`text-xs uppercase py-3 font-bold block ${
+        onClick={onNav}
+        className={`flex items-center gap-3 px-4 py-2.5 mx-2 rounded-lg text-sm font-medium transition-all duration-150 group border-l-2 ${
           active
-            ? "text-sky-500 hover:text-sky-600"
-            : "text-slate-700 hover:text-slate-500"
+            ? "bg-brand-600/20 text-white border-brand-400"
+            : "text-slate-400 hover:bg-sidebar-hover hover:text-white border-transparent"
         }`}
       >
-        {children}
+        <Icon
+          className={`w-4 h-4 flex-shrink-0 ${
+            active
+              ? "text-brand-400"
+              : "text-slate-500 group-hover:text-slate-300"
+          }`}
+        />
+        <span>{children}</span>
       </Link>
     </li>
   );
@@ -36,94 +87,146 @@ export function DashboardLayout({
 }) {
   const { user } = useAuth();
   const isAdmin = isAdminEmail(user?.email);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   async function logout() {
     await signOut(auth);
     window.location.href = "/login";
   }
 
+  const closeSidebar = () => setSidebarOpen(false);
+
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-slate-100 font-sans antialiased text-slate-800">
+    <div className="flex h-screen w-screen overflow-hidden bg-sidebar-bg font-sans antialiased text-slate-800">
+
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-10 md:hidden"
+          onClick={closeSidebar}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="hidden w-64 flex-shrink-0 bg-white shadow-xl md:flex md:flex-col z-20 overflow-y-auto relative">
-        <div className="px-6 py-5">
+      <aside
+        className={`
+          fixed md:relative inset-y-0 left-0 z-20
+          w-64 flex-shrink-0 flex flex-col
+          bg-sidebar-bg shadow-2xl
+          transition-transform duration-300 ease-in-out
+          ${sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
+          overflow-y-auto
+        `}
+      >
+        {/* Logo */}
+        <div className="flex items-center justify-between px-4 py-5 border-b border-sidebar-border">
           <Link
-            className="md:block text-left text-slate-600 inline-block whitespace-nowrap text-sm uppercase font-bold"
             to="/dashboard"
+            onClick={closeSidebar}
+            className="flex items-center gap-2.5"
           >
-            Ceylonify
-            <div className="text-[10px] text-slate-400 normal-case mt-1 font-semibold tracking-wider">
-              {isAdmin ? "Admin & Host" : "Host Dashboard"}
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-400 to-brand-700 flex items-center justify-center flex-shrink-0 shadow-md">
+              <span className="text-white text-sm font-black">C</span>
+            </div>
+            <div>
+              <div className="text-white text-sm font-bold tracking-wide leading-tight">
+                Ceylonify
+              </div>
+              <div className="text-[9px] font-semibold uppercase tracking-widest text-sidebar-muted">
+                {isAdmin ? "Admin & Host" : "Host Dashboard"}
+              </div>
             </div>
           </Link>
+          <button
+            className="md:hidden text-slate-400 hover:text-white transition-colors"
+            onClick={closeSidebar}
+          >
+            <XMarkIcon className="w-5 h-5" />
+          </button>
         </div>
 
-        <div className="flex-1 px-6 overflow-y-auto">
-          {/* Discover */}
-          <hr className="my-4 border-slate-200" />
-          <h6 className="text-slate-500 text-xs uppercase font-bold block pt-1 pb-4 no-underline">
-            Discover
-          </h6>
-          <ul className="flex flex-col list-none">
-            <NavLink to="/browse">Browse Experiences</NavLink>
-            <NavLink to="/saved">Saved Listings</NavLink>
-          </ul>
+        {/* Navigation */}
+        <nav className="flex-1 py-4 overflow-y-auto">
+          <div className="mb-2">
+            <p className="px-6 text-[9px] font-bold uppercase tracking-widest text-sidebar-muted mb-1">
+              Discover
+            </p>
+            <ul className="space-y-0.5">
+              <NavLink to="/browse" onNav={closeSidebar}>Browse Experiences</NavLink>
+              <NavLink to="/saved" onNav={closeSidebar}>Saved Listings</NavLink>
+            </ul>
+          </div>
 
-          {/* Host */}
-          <hr className="my-4 border-slate-200" />
-          <h6 className="text-slate-500 text-xs uppercase font-bold block pt-1 pb-4 no-underline">
-            Host
-          </h6>
-          <ul className="flex flex-col list-none">
-            <NavLink to="/dashboard">My Listings</NavLink>
-            <NavLink to="/host/create">Create Listing</NavLink>
-            <NavLink to="/host/analytics">Analytics</NavLink>
-            {!isAdmin && <NavLink to="/host/profile">Profile & Settings</NavLink>}
-          </ul>
+          <div className="mt-5 mb-2">
+            <p className="px-6 text-[9px] font-bold uppercase tracking-widest text-sidebar-muted mb-1">
+              Host
+            </p>
+            <ul className="space-y-0.5">
+              <NavLink to="/dashboard" onNav={closeSidebar}>My Listings</NavLink>
+              <NavLink to="/host/create" onNav={closeSidebar}>Create Listing</NavLink>
+              <NavLink to="/host/analytics" onNav={closeSidebar}>Analytics</NavLink>
+              {!isAdmin && (
+                <NavLink to="/host/profile" onNav={closeSidebar}>Profile & Settings</NavLink>
+              )}
+            </ul>
+          </div>
 
           {isAdmin && (
-            <>
-              <hr className="my-4 border-slate-200" />
-              <h6 className="text-slate-500 text-xs uppercase font-bold block pt-1 pb-4 no-underline">
+            <div className="mt-5 mb-2">
+              <p className="px-6 text-[9px] font-bold uppercase tracking-widest text-sidebar-muted mb-1">
                 Admin
-              </h6>
-              <ul className="flex flex-col list-none md:mb-4 gap-1">
-                <NavLink to="/admin">Overview</NavLink>
-                <NavLink to="/admin/pending">Pending Moderation</NavLink>
-                <NavLink to="/admin/listings">All Listings</NavLink>
-                <NavLink to="/admin/users">User Management</NavLink>
-                <NavLink to="/admin/reports">Reports</NavLink>
-                <NavLink to="/admin/audit-logs">Audit Logs</NavLink>
-                <NavLink to="/host/profile">Profile & Settings</NavLink>
+              </p>
+              <ul className="space-y-0.5">
+                <NavLink to="/admin" onNav={closeSidebar}>Overview</NavLink>
+                <NavLink to="/admin/pending" onNav={closeSidebar}>Pending Moderation</NavLink>
+                <NavLink to="/admin/listings" onNav={closeSidebar}>All Listings</NavLink>
+                <NavLink to="/admin/users" onNav={closeSidebar}>User Management</NavLink>
+                <NavLink to="/admin/reports" onNav={closeSidebar}>Reports</NavLink>
+                <NavLink to="/admin/audit-logs" onNav={closeSidebar}>Audit Logs</NavLink>
+                <NavLink to="/host/profile" onNav={closeSidebar}>Profile & Settings</NavLink>
               </ul>
-            </>
+            </div>
           )}
+        </nav>
 
-          <hr className="my-4 border-slate-200" />
+        {/* Logout */}
+        <div className="border-t border-sidebar-border px-2 py-4">
           <button
             onClick={logout}
-            className="text-xs uppercase py-3 font-bold block text-slate-600 hover:text-slate-800 text-left w-full transition-colors"
+            className="flex items-center gap-3 w-full px-4 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:bg-sidebar-hover hover:text-white transition-all duration-150"
           >
-            Logout
+            <ArrowLeftStartOnRectangleIcon className="w-4 h-4" />
+            <span>Logout</span>
           </button>
         </div>
       </aside>
 
-      {/* Main Content Wrapper */}
-      <div className="flex-1 overflow-auto relative bg-slate-100 flex flex-col">
+      {/* Main content */}
+      <div className="flex-1 overflow-auto relative bg-surface-page flex flex-col min-w-0">
+
         {/* Header */}
-        <div className="relative bg-sky-600 pb-32 pt-12 md:pt-16 w-full flex-shrink-0 shadow-lg">
+        <div className="relative bg-header-gradient pb-32 pt-12 md:pt-16 w-full flex-shrink-0 shadow-lg">
           <div className="px-4 md:px-10 mx-auto w-full">
-            <div className="flex justify-between items-center text-white mb-4">
-              <div>
-                <h1 className="text-white text-2xl font-semibold">{title}</h1>
-                {subtitle && (
-                  <p className="text-white/80 text-sm mt-1 font-light tracking-wide">
-                    {subtitle}
-                  </p>
-                )}
+            <div className="flex justify-between items-start text-white">
+              <div className="flex items-center gap-3">
+                <button
+                  className="md:hidden text-white/80 hover:text-white transition-colors mr-1"
+                  onClick={() => setSidebarOpen(true)}
+                >
+                  <Bars3Icon className="w-6 h-6" />
+                </button>
+                <div>
+                  <h1 className="text-white text-2xl font-semibold">{title}</h1>
+                  {subtitle && (
+                    <p className="text-white/70 text-sm mt-0.5 font-light tracking-wide">
+                      {subtitle}
+                    </p>
+                  )}
+                </div>
               </div>
-              <div>{actions}</div>
+              <div className="flex items-center gap-2 flex-wrap justify-end">
+                {actions}
+              </div>
             </div>
           </div>
         </div>
@@ -134,13 +237,9 @@ export function DashboardLayout({
 
           <footer className="block pt-8 pb-4 mt-auto">
             <div className="container mx-auto px-4">
-              <hr className="mb-4 border-b-1 border-slate-200" />
-              <div className="flex flex-wrap items-center md:justify-between justify-center">
-                <div className="w-full md:w-4/12 px-4">
-                  <div className="text-sm text-slate-500 font-semibold py-1">
-                    © {new Date().getFullYear()} Ceylonify
-                  </div>
-                </div>
+              <hr className="mb-4 border-slate-200" />
+              <div className="text-sm text-slate-400 font-semibold py-1">
+                © {new Date().getFullYear()} Ceylonify
               </div>
             </div>
           </footer>
