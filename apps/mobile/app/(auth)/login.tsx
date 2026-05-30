@@ -81,6 +81,31 @@ export default function LoginScreen() {
           // permission denied or unsupported — skip
         }
       })();
+    } else {
+      // Expo push token registration — native (iOS/Android)
+      void (async () => {
+        try {
+          const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+          const pushEnabled = await AsyncStorage.getItem('pushNotificationsEnabled');
+          if (pushEnabled === 'false') return;
+
+          const Notifications = await import('expo-notifications');
+          const { status } = await Notifications.requestPermissionsAsync();
+          if (status !== 'granted') return;
+
+          const Constants = (await import('expo-constants')).default;
+          const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+          const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
+          if (token) {
+            await gqlFetch(
+              `mutation RegisterDeviceToken($token: String!) { registerDeviceToken(token: $token) }`,
+              { token },
+            );
+          }
+        } catch {
+          // permission denied or unsupported — skip
+        }
+      })();
     }
 
     setLoading(false);

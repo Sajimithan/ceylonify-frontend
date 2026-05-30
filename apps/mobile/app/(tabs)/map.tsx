@@ -57,6 +57,11 @@ const ITINERARY_QUERY = `
 `;
 
 const SAVED_LISTINGS_QUERY = `query SavedListings { savedListings { id } }`;
+const UPDATE_LOCATION_MUTATION = `
+  mutation UpdateUserLocation($lat: Float!, $lng: Float!) {
+    updateUserLocation(lat: $lat, lng: $lng)
+  }
+`;
 const SAVE_MUTATION   = `mutation SaveListing($listingId: ID!) { saveListing(listingId: $listingId) }`;
 const UNSAVE_MUTATION = `mutation UnsaveListing($listingId: ID!) { unsaveListing(listingId: $listingId) }`;
 const ADD_ITINERARY   = `mutation AddToItinerary($listingId: ID!, $plannedDate: String!, $note: String) {
@@ -420,6 +425,8 @@ export default function MapScreen() {
       if (!loc) throw new Error('No location found. Set a mock location via emulator Extended Controls.');
       const { latitude: lat, longitude: lng } = loc.coords;
       setUserLocation({ lat, lng });
+      // Persist location so backend can notify this traveler about nearby future events
+      void gqlFetch(UPDATE_LOCATION_MUTATION, { lat, lng }).catch(() => {});
 
       const result = await gqlFetch<{ nearbyListings: any[] }>(NEARBY_QUERY, {
         lat, lng, radiusKm: 50, limit: 40,

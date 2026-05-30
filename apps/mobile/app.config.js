@@ -38,6 +38,14 @@ module.exports = {
         },
       ],
       '@react-native-community/datetimepicker',
+      [
+        'expo-notifications',
+        {
+          icon: './assets/images/logo.png',
+          color: '#0EA5A4',
+          sounds: [],
+        },
+      ],
     ],
     experiments: {
       typedRoutes: true,
