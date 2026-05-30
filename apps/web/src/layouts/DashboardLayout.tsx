@@ -119,15 +119,17 @@ export function DashboardLayout({
         `}
       >
         {/* Logo */}
-        <div className="flex items-center justify-between px-4 py-5 border-b border-sidebar-border">
+        <div className="flex items-center justify-between px-4 py-4 border-b border-sidebar-border">
           <Link
             to="/dashboard"
             onClick={closeSidebar}
             className="flex items-center gap-2.5"
           >
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-400 to-brand-700 flex items-center justify-center flex-shrink-0 shadow-md">
-              <span className="text-white text-sm font-black">C</span>
-            </div>
+            <img
+              src="/logo.png"
+              alt="Ceylonify"
+              className="w-10 h-10 rounded-full object-cover flex-shrink-0 shadow-md ring-1 ring-brand-400/40"
+            />
             <div>
               <div className="text-white text-sm font-bold tracking-wide leading-tight">
                 Ceylonify

@@ -40,11 +40,20 @@ export function Login() {
       <div className="absolute inset-0 bg-black/50" />
 
       {/* Branding — top left */}
-      <div className="absolute left-8 top-8 z-10 text-white">
-        <Link to="/" className="text-2xl font-bold tracking-tight drop-shadow hover:opacity-80 transition-opacity">
-          Ceylonify
+      <div className="absolute left-8 top-6 z-10">
+        <Link to="/" className="flex items-center gap-2.5 hover:opacity-90 transition-opacity">
+          <img
+            src="/logo.png"
+            alt="Ceylonify"
+            className="w-12 h-12 rounded-full object-cover shadow-lg ring-2 ring-white/20"
+          />
+          <div>
+            <div className="text-white font-bold text-xl tracking-tight drop-shadow leading-tight">
+              Ceylonify
+            </div>
+            <div className="text-white/60 text-xs">Host & Admin Dashboard</div>
+          </div>
         </Link>
-        <div className="text-sm text-white/60">Host & Admin Dashboard</div>
       </div>
 
       {/* Centered login card */}

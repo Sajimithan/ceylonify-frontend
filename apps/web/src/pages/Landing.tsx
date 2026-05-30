@@ -41,15 +41,22 @@ export function Landing() {
         <div className="absolute inset-0 bg-black/55" />
 
         {/* Top nav */}
-        <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-8 py-5">
-          <div className="text-white font-bold text-xl tracking-tight drop-shadow">
-            Ceylonify
-          </div>
+        <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-8 py-4">
+          <Link to="/" className="flex items-center gap-2.5">
+            <img
+              src="/logo.png"
+              alt="Ceylonify"
+              className="w-12 h-12 rounded-full object-cover shadow-lg ring-2 ring-white/20"
+            />
+            <span className="text-white font-bold text-xl tracking-tight drop-shadow">
+              Ceylonify
+            </span>
+          </Link>
           <div className="flex items-center gap-4">
             {user ? (
               <Link
                 to="/dashboard"
-                className="text-sm font-bold text-white bg-sky-500 hover:bg-sky-600 px-5 py-2 rounded-lg shadow transition-colors"
+                className="text-sm font-bold text-white bg-brand-500 hover:bg-brand-600 px-5 py-2 rounded-lg shadow transition-colors"
               >
                 Dashboard
               </Link>
@@ -63,7 +70,7 @@ export function Landing() {
                 </Link>
                 <Link
                   to="/register"
-                  className="text-sm font-bold text-white bg-sky-500 hover:bg-sky-600 px-5 py-2 rounded-lg shadow transition-colors"
+                  className="text-sm font-bold text-white bg-brand-500 hover:bg-brand-600 px-5 py-2 rounded-lg shadow transition-colors"
                 >
                   Get started
                 </Link>
@@ -86,7 +93,7 @@ export function Landing() {
           <div className="flex flex-wrap justify-center gap-4">
             <Link
               to={user ? "/browse" : "/login"}
-              className="px-8 py-3 bg-sky-500 hover:bg-sky-600 text-white font-bold rounded-xl shadow-lg transition-colors text-sm uppercase tracking-wider"
+              className="px-8 py-3 bg-brand-500 hover:bg-brand-600 text-white font-bold rounded-xl shadow-lg transition-colors text-sm uppercase tracking-wider"
             >
               Browse Experiences
             </Link>
@@ -130,7 +137,7 @@ export function Landing() {
       </div>
 
       {/* CTA */}
-      <div className="bg-sky-600 py-16 px-6 text-center">
+      <div className="bg-brand-600 py-16 px-6 text-center">
         <h2 className="text-2xl font-bold text-white mb-3">
           Ready to explore?
         </h2>
