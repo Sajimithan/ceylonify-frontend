@@ -6,6 +6,7 @@ import { DashboardLayout } from "../../layouts/DashboardLayout";
 import { Button } from "../../ui/Button";
 import { ADMIN_ALL_USERS, ADMIN_CHANGE_USER_ROLE, ADMIN_UPDATE_SUBSCRIPTION, ADMIN_UPDATE_USER_PHONE, ADMIN_SUSPEND_USER, ADMIN_ACTIVATE_USER, ADMIN_CREATE_ADMIN_ACCOUNT } from "./admin.gql";
 import { ADMIN_PENDING_HOST_APPLICATIONS } from "./host-applications.gql";
+import { ME_QUERY } from "../browse.gql";
 
 type UserRecord = {
   id: string;
@@ -51,6 +52,9 @@ function userInitials(email?: string) {
 
 export function AdminUsers() {
   const nav = useNavigate();
+  const { data: meData } = useQuery(ME_QUERY);
+  const isSuperAdmin: boolean = meData?.me?.isSuperAdmin ?? false;
+
   const { data, loading, error, refetch } = useQuery<UsersData>(ADMIN_ALL_USERS, {
     fetchPolicy: "network-only",
   });
@@ -115,9 +119,9 @@ export function AdminUsers() {
     setRegisterStatus("idle");
     setRegisterError("");
     try {
-      await createAdminAccount({ variables: { email: adminEmail.trim(), password: adminPassword } });
+      const createdEmail = adminEmail.trim();
+      await createAdminAccount({ variables: { email: createdEmail, password: adminPassword } });
       setRegisterStatus("success");
-      setAdminEmail("");
       setAdminPassword("");
       await refetch();
     } catch (e: unknown) {
@@ -225,8 +229,13 @@ export function AdminUsers() {
 
               {/* Status messages */}
               {registerStatus === "success" && (
-                <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm font-semibold text-emerald-700">
-                  ✅ Admin account created and credentials sent by email.
+                <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-4 space-y-2">
+                  <p className="text-sm font-bold text-emerald-700">✅ Admin account created successfully.</p>
+                  <p className="text-xs text-emerald-600">Share these credentials with the new admin:</p>
+                  <div className="bg-white border border-emerald-200 rounded-lg px-4 py-3 space-y-1">
+                    <div className="text-xs text-slate-400 font-semibold uppercase">Email</div>
+                    <div className="text-sm font-mono text-slate-700">{adminEmail || "—"}</div>
+                  </div>
                 </div>
               )}
               {registerStatus === "error" && (
@@ -235,15 +244,18 @@ export function AdminUsers() {
                 </div>
               )}
 
-              {/* Send & Create button */}
+              {/* Create button */}
               <button
                 type="button"
                 onClick={handleCreateAdmin}
                 disabled={creating || !adminEmail.trim() || !adminPassword}
                 className="w-full py-2.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-sm rounded-lg transition-colors"
               >
-                {creating ? "Creating & Sending…" : "Send & Create Admin Account"}
+                {creating ? "Creating…" : "Create Admin Account"}
               </button>
+              <p className="text-[11px] text-slate-400 text-center">
+                The account is created immediately. Copy the generated password above and share it with the new admin.
+              </p>
             </div>
           )}
         </div>
@@ -384,20 +396,27 @@ export function AdminUsers() {
                         </select>
                       ) : (
                         <div className="flex flex-col gap-1.5">
-                          <span
-                            className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide w-fit
-                              ${u.role === "ADMIN"
-                                ? "bg-slate-800 text-white"
-                                : u.role === "HOST"
-                                ? "bg-violet-100 text-violet-700"
-                                : "bg-brand-100 text-brand-700"
-                              }`}
-                          >
-                            {u.role}
-                          </span>
+                          {!(u.role === "ADMIN" && u.firebaseUid === meData?.me?.firebaseUid && isSuperAdmin) && (
+                            <span
+                              className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide w-fit
+                                ${u.role === "ADMIN"
+                                  ? "bg-slate-800 text-white"
+                                  : u.role === "HOST"
+                                  ? "bg-violet-100 text-violet-700"
+                                  : "bg-brand-100 text-brand-700"
+                                }`}
+                            >
+                              {u.role}
+                            </span>
+                          )}
                           {u.role === "TRAVELER" && pendingUids.has(u.firebaseUid) && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border w-fit bg-amber-50 text-amber-700 border-amber-300">
                               ⏳ Host Pending
+                            </span>
+                          )}
+                          {u.role === "ADMIN" && u.firebaseUid === meData?.me?.firebaseUid && isSuperAdmin && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border w-fit bg-slate-800 text-white border-slate-700">
+                              👑 Super Admin
                             </span>
                           )}
                           {u.badgeLevel && u.badgeLevel !== "NONE" && (
@@ -442,6 +461,7 @@ export function AdminUsers() {
                           </>
                         ) : (
                           <>
+                            {(u.role !== "ADMIN" || isSuperAdmin) && (
                             <button
                               className="text-[10px] font-bold text-brand-600 hover:text-brand-800 border border-brand-200 hover:bg-brand-50 px-3 py-1 rounded-lg transition-colors"
                               onClick={() => {
@@ -451,6 +471,7 @@ export function AdminUsers() {
                             >
                               Edit Role
                             </button>
+                            )}
                             {u.role === "TRAVELER" && (
                               <button
                                 className="text-[10px] font-bold text-violet-600 hover:text-violet-800 border border-violet-200 hover:bg-violet-50 px-3 py-1 rounded-lg transition-colors disabled:opacity-40"
@@ -501,7 +522,7 @@ export function AdminUsers() {
                                 Revoke Premium
                               </button>
                             )}
-                            {u.role !== "ADMIN" && (
+                            {(u.role !== "ADMIN" || isSuperAdmin) && u.firebaseUid !== meData?.me?.firebaseUid && (
                               u.isSuspended ? (
                                 <button
                                   className="text-[10px] font-bold text-emerald-600 border border-emerald-200 hover:bg-emerald-50 px-3 py-1 rounded-lg transition-colors"
