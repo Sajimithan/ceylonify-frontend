@@ -5,9 +5,10 @@ import { CREATE_LISTING } from "./listings.gql";
 import {
   GoogleMap,
   Marker,
-  Autocomplete,
   useJsApiLoader,
 } from "@react-google-maps/api";
+
+const GmpAutocomplete = 'gmp-place-autocomplete' as any;
 import { MAPS_LIBRARIES } from "../../lib/googleMaps";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
@@ -75,7 +76,7 @@ export function CreateListing() {
   const [templateName, setTemplateName] = useState("");
   const [templateSaved, setTemplateSaved] = useState(false);
 
-  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+  const autocompleteRef = useRef<HTMLElement | null>(null);
 
   // Load templates scoped to this user's account
   useEffect(() => {
@@ -103,18 +104,24 @@ export function CreateListing() {
     }
   }
 
-  function onPlaceChanged() {
-    const place = autocompleteRef.current?.getPlace();
-    if (!place) return;
-    if (place.name) setPlaceName(place.name);
-    if (place.geometry?.location) {
-      const pLat = place.geometry.location.lat();
-      const pLng = place.geometry.location.lng();
-      setLat(pLat);
-      setLng(pLng);
-      setMapLink(`https://www.google.com/maps/search/?api=1&query=${pLat},${pLng}`);
+  useEffect(() => {
+    const el = autocompleteRef.current;
+    if (!el) return;
+    async function handleSelect(e: Event) {
+      const { place } = (e as CustomEvent).detail;
+      await place.fetchFields({ fields: ['displayName', 'location'] });
+      if (place.displayName) setPlaceName(place.displayName);
+      if (place.location) {
+        const pLat = place.location.lat();
+        const pLng = place.location.lng();
+        setLat(pLat);
+        setLng(pLng);
+        setMapLink(`https://www.google.com/maps/search/?api=1&query=${pLat},${pLng}`);
+      }
     }
-  }
+    el.addEventListener('gmp-placeselect', handleSelect);
+    return () => el.removeEventListener('gmp-placeselect', handleSelect);
+  }, [mapsLoaded]);
 
   function applyTemplate(template: ListingTemplate) {
     setTitle(template.title);
@@ -445,17 +452,12 @@ export function CreateListing() {
                   <div className="mb-2 uppercase text-slate-600 text-xs font-bold">
                     Search by Place Name
                   </div>
-                  <Autocomplete
-                    onLoad={(ref) => { autocompleteRef.current = ref; }}
-                    onPlaceChanged={onPlaceChanged}
-                    options={{ componentRestrictions: { country: "lk" } }}
-                  >
-                    <input
-                      type="text"
-                      placeholder="Search for a place in Sri Lanka…"
-                      className="border-0 px-3 py-3 placeholder-slate-300 text-slate-600 bg-white rounded text-sm shadow focus:outline-none focus:ring w-full ease-linear transition-all duration-150"
-                    />
-                  </Autocomplete>
+                  <GmpAutocomplete
+                    ref={autocompleteRef}
+                    country="lk"
+                    placeholder="Search for a place in Sri Lanka…"
+                    style={{ width: '100%', display: 'block' }}
+                  />
                 </label>
               )}
               <p className="text-xs text-slate-500">

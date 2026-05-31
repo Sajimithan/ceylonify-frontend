@@ -1,9 +1,11 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, useEffect } from "react";
 import { createUserWithEmailAndPassword, sendEmailVerification } from "firebase/auth";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { gql } from "@apollo/client";
 import { useMutation } from "@apollo/client/react";
-import { GoogleMap, Marker, Autocomplete, useJsApiLoader } from "@react-google-maps/api";
+import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
+
+const GmpAutocomplete = 'gmp-place-autocomplete' as any;
 import { MAPS_LIBRARIES } from "../lib/googleMaps";
 import { auth, storage } from "../auth/firebase";
 import { Link } from "react-router-dom";
@@ -121,28 +123,32 @@ function BusinessMapPicker({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string,
     libraries: MAPS_LIBRARIES,
   });
-  const [autocomplete, setAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
+  const autocompleteRef = useRef<HTMLElement | null>(null);
   const center = lat && lng ? { lat, lng } : { lat: 6.9271, lng: 79.8612 };
   const onLoad = useCallback(() => {}, []);
 
-  function onPlaceChanged() {
-    if (!autocomplete) return;
-    const place = autocomplete.getPlace();
-    const loc = place.geometry?.location;
-    if (loc) onPick(loc.lat(), loc.lng());
-  }
+  useEffect(() => {
+    const el = autocompleteRef.current;
+    if (!el) return;
+    async function handleSelect(e: Event) {
+      const { place } = (e as CustomEvent).detail;
+      await place.fetchFields({ fields: ['location'] });
+      const loc = place.location;
+      if (loc) onPick(loc.lat(), loc.lng());
+    }
+    el.addEventListener('gmp-placeselect', handleSelect);
+    return () => el.removeEventListener('gmp-placeselect', handleSelect);
+  }, [isLoaded, onPick]);
 
   if (!isLoaded) return <div className="h-40 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 text-xs">Loading map…</div>;
 
   return (
     <div className="space-y-2">
-      <Autocomplete onLoad={setAutocomplete} onPlaceChanged={onPlaceChanged}>
-        <input
-          type="text"
-          placeholder="Search for your business location…"
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-400"
-        />
-      </Autocomplete>
+      <GmpAutocomplete
+        ref={autocompleteRef}
+        placeholder="Search for your business location…"
+        style={{ width: '100%', display: 'block' }}
+      />
       <GoogleMap
         mapContainerClassName="w-full h-48 rounded-xl shadow"
         center={center}

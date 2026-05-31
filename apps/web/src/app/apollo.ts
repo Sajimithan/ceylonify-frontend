@@ -31,5 +31,13 @@ const errorLink = onError(({ graphQLErrors, networkError }) => {
 
 export const apolloClient = new ApolloClient({
   link: errorLink.concat(authLink).concat(httpLink),
-  cache: new InMemoryCache(),
+  cache: new InMemoryCache({
+    typePolicies: {
+      Query: {
+        fields: {
+          me: { merge: true },
+        },
+      },
+    },
+  }),
 });

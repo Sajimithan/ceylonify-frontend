@@ -1,12 +1,11 @@
 import { useQuery, useMutation } from '@apollo/client/react';
 import { Link } from 'react-router-dom';
 import { MY_LISTINGS, DELETE_LISTING } from './listings.gql';
-import { REGISTER_DEVICE_TOKEN } from './notifications.gql';
 import { Card } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
 import { Button } from '../../ui/Button';
 import { DashboardLayout } from '../../layouts/DashboardLayout';
-import { getFcmToken, listenForegroundMessages } from '../../notifications/fcm';
+import { listenForegroundMessages } from '../../notifications/fcm';
 import { useEffect, useState } from 'react';
 import { useFeatureFlags } from '../../auth/useFeatureFlags';
 import { ShareIcon, XMarkIcon, ClipboardDocumentIcon, CheckIcon } from '@heroicons/react/24/outline';
@@ -194,29 +193,17 @@ function ShareModal({
 
 export function MyListings() {
   const { data, loading, error, refetch } = useQuery<MyListingsData>(MY_LISTINGS);
-  const [registerToken] = useMutation(REGISTER_DEVICE_TOKEN);
   const { isEnabledFor } = useFeatureFlags();
   const canCreateListing = isEnabledFor("HOST_LISTING_CREATION", "HOST");
   const [deleteListing] = useMutation(DELETE_LISTING, {
     onCompleted: () => refetch()
   });
   
-  const [tokenStatus, setTokenStatus] = useState<'idle' | 'enabled' | 'failed'>('idle');
   const [sharingListing, setSharingListing] = useState<Listing | null>(null);
 
   useEffect(() => {
     listenForegroundMessages();
   }, []);
-
-  async function enableNotifications() {
-    const token = await getFcmToken();
-    if (!token) {
-      setTokenStatus('failed');
-      return;
-    }
-    await registerToken({ variables: { token } });
-    setTokenStatus('enabled');
-  }
 
   async function handleDelete(id: string) {
     if (confirm("Are you sure you want to delete this listing?")) {
@@ -241,14 +228,6 @@ export function MyListings() {
       subtitle="Manage your experiences"
       actions={
         <>
-          <Button
-            variant="ghost"
-            onClick={enableNotifications}
-            disabled={tokenStatus === 'enabled'}
-            className="text-white"
-          >
-            {tokenStatus === 'enabled' ? '🔔 Enabled' : 'Enable Notifications'}
-          </Button>
           <Button variant="ghost" className="text-white" onClick={() => refetch()}>
             Refresh
           </Button>
@@ -268,12 +247,6 @@ export function MyListings() {
         {error ? (
           <div className="rounded border-0 bg-red-100 p-4 text-sm font-bold text-red-800 shadow mb-4">
             {error.message}
-          </div>
-        ) : null}
-
-        {tokenStatus === 'failed' ? (
-          <div className="mb-4 rounded-xl bg-yellow-50 p-3 text-sm text-yellow-700">
-            Failed to get notification token. Check browser permissions.
           </div>
         ) : null}
 
