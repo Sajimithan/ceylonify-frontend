@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { gql, useMutation } from "@apollo/client";
+import { gql } from "@apollo/client";
+import { useMutation } from "@apollo/client/react";
 import { Link } from "react-router-dom";
 import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
