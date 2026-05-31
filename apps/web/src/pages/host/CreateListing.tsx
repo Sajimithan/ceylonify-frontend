@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { gql } from "@apollo/client";
 import { useMutation } from "@apollo/client/react";
 import { CREATE_LISTING } from "./listings.gql";
@@ -17,6 +17,7 @@ import { Card } from "../../ui/Card";
 import { DashboardLayout } from "../../layouts/DashboardLayout";
 import { useNavigate } from "react-router-dom";
 import { useFeatureFlags } from "../../auth/useFeatureFlags";
+import { useAuth } from "../../auth/useAuth";
 
 const ENHANCE_DESCRIPTION = gql`
   mutation EnhanceDescription($text: String!) {
@@ -44,17 +45,11 @@ type ListingTemplate = {
   isPremium: boolean;
 };
 
-function loadTemplates(): ListingTemplate[] {
-  try {
-    return JSON.parse(localStorage.getItem("ceylonify_templates") || "[]");
-  } catch {
-    return [];
-  }
-}
-
 export function CreateListing() {
   const nav = useNavigate();
   const { isEnabledFor } = useFeatureFlags();
+  const { user } = useAuth();
+  const templateKey = `ceylonify_templates_${user?.uid ?? "guest"}`;
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -75,12 +70,21 @@ export function CreateListing() {
   const [uploading, setUploading] = useState(false);
   const [aiApplied, setAiApplied] = useState(false);
 
-  const [templates, setTemplates] = useState<ListingTemplate[]>(loadTemplates);
+  const [templates, setTemplates] = useState<ListingTemplate[]>([]);
   const [showTemplateSave, setShowTemplateSave] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [templateSaved, setTemplateSaved] = useState(false);
 
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+
+  // Load templates scoped to this user's account
+  useEffect(() => {
+    try {
+      setTemplates(JSON.parse(localStorage.getItem(templateKey) || "[]"));
+    } catch {
+      setTemplates([]);
+    }
+  }, [templateKey]);
 
   const [createListing, { loading }] = useMutation(CREATE_LISTING);
   const [enhance, { loading: enhancing }] = useMutation(ENHANCE_DESCRIPTION);
@@ -131,7 +135,7 @@ export function CreateListing() {
       title, description, type, category, price, placeName, mapLink, isPremium,
     };
     const updated = [...templates, newTemplate];
-    localStorage.setItem("ceylonify_templates", JSON.stringify(updated));
+    localStorage.setItem(templateKey, JSON.stringify(updated));
     setTemplates(updated);
     setTemplateName("");
     setShowTemplateSave(false);
@@ -141,7 +145,7 @@ export function CreateListing() {
 
   function deleteTemplate(id: string) {
     const updated = templates.filter((t) => t.id !== id);
-    localStorage.setItem("ceylonify_templates", JSON.stringify(updated));
+    localStorage.setItem(templateKey, JSON.stringify(updated));
     setTemplates(updated);
   }
 

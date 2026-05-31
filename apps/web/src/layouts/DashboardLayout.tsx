@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useFeatureFlags } from "../auth/useFeatureFlags";
+import { NotificationBell } from "../notifications/NotificationBell";
 import { Link, useLocation } from "react-router-dom";
 import { auth } from "../auth/firebase";
 import { signOut } from "firebase/auth";
@@ -243,6 +244,7 @@ export function DashboardLayout({
               </div>
               <div className="flex items-center gap-2 flex-wrap justify-end">
                 {actions}
+                <NotificationBell />
               </div>
             </div>
           </div>
