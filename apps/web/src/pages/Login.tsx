@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../auth/firebase";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
 
@@ -18,7 +18,7 @@ export function Login() {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password);
-      nav("/", { replace: true });
+      nav("/dashboard", { replace: true });
     } catch (e: unknown) {
       const error = e as Error;
       setErr(error?.message ?? "Login failed");
@@ -40,9 +40,20 @@ export function Login() {
       <div className="absolute inset-0 bg-black/50" />
 
       {/* Branding — top left */}
-      <div className="absolute left-8 top-8 z-10 text-white">
-        <div className="text-2xl font-bold tracking-tight drop-shadow">Ceylonify</div>
-        <div className="text-sm text-white/60">Host & Admin Dashboard</div>
+      <div className="absolute left-8 top-6 z-10">
+        <Link to="/" className="flex items-center gap-2.5 hover:opacity-90 transition-opacity">
+          <img
+            src="/logo.png"
+            alt="Ceylonify"
+            className="w-12 h-12 rounded-full object-cover shadow-lg ring-2 ring-white/20"
+          />
+          <div>
+            <div className="text-white font-bold text-xl tracking-tight drop-shadow leading-tight">
+              Ceylonify
+            </div>
+            <div className="text-white/60 text-xs">Host & Admin Dashboard</div>
+          </div>
+        </Link>
       </div>
 
       {/* Centered login card */}
@@ -59,13 +70,23 @@ export function Login() {
             onChange={(e) => setEmail(e.target.value)}
             autoComplete="email"
           />
-          <Input
-            label="Password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-          />
+          <div>
+            <Input
+              label="Password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+            />
+            <div className="text-right mt-1">
+              <Link
+                to="/forgot-password"
+                className="text-xs font-semibold text-sky-600 hover:underline"
+              >
+                Forgot password?
+              </Link>
+            </div>
+          </div>
 
           {err ? (
             <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -78,7 +99,14 @@ export function Login() {
           </Button>
         </form>
 
-        <div className="mt-6 space-y-1 text-xs text-neutral-400">
+        <p className="mt-6 text-center text-xs text-neutral-400">
+          Don't have an account?{" "}
+          <Link to="/register" className="font-bold text-sky-600 hover:underline">
+            Create one
+          </Link>
+        </p>
+
+        <div className="mt-4 space-y-1 text-xs text-neutral-400">
           <p>Host: any registered Firebase user</p>
           <p>Admin: <span className="font-mono">admin@test.com</span></p>
         </div>

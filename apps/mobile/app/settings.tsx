@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert } from 'react-native';
 import { X, Moon, Bell, Globe, Lock, Shield, FileText, HelpCircle, LogOut, ChevronRight } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
@@ -33,6 +34,18 @@ export default function SettingsScreen() {
     const router = useRouter();
     const [darkMode, setDarkMode] = useState(false);
     const [pushNotifications, setPushNotifications] = useState(true);
+
+    useEffect(() => {
+        AsyncStorage.getItem('pushNotificationsEnabled').then((val) => {
+            if (val === 'false') setPushNotifications(false);
+        }).catch(() => {});
+    }, []);
+
+    async function handleTogglePush() {
+        const next = !pushNotifications;
+        setPushNotifications(next);
+        await AsyncStorage.setItem('pushNotificationsEnabled', String(next));
+    }
 
     const handleLogout = async () => {
         Alert.alert(
@@ -74,7 +87,7 @@ export default function SettingsScreen() {
                     label: 'Push Notifications',
                     type: 'toggle',
                     value: pushNotifications,
-                    onToggle: () => setPushNotifications(!pushNotifications),
+                    onToggle: handleTogglePush,
                 },
                 {
                     icon: <Globe size={20} color="#667085" />,

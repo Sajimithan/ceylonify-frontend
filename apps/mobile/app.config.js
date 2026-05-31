@@ -1,0 +1,54 @@
+module.exports = {
+  expo: {
+    name: 'Ceylonify Traveler',
+    slug: 'ceylonify-traveler',
+    version: '1.0.0',
+    orientation: 'portrait',
+    icon: './assets/images/logo.png',
+    scheme: 'ceylonify',
+    userInterfaceStyle: 'automatic',
+    ios: {
+      supportsTablet: true,
+      bundleIdentifier: 'com.sajimithan.ceylonify',
+    },
+    android: {
+      adaptiveIcon: {
+        foregroundImage: './assets/images/logo.png',
+        backgroundColor: '#ffffff',
+      },
+      package: 'com.sajimithan.ceylonify',
+      config: {
+        googleMaps: {
+          apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
+        },
+      },
+    },
+    web: {
+      bundler: 'metro',
+      output: 'static',
+      favicon: './assets/images/logo.png',
+    },
+    plugins: [
+      'expo-router',
+      [
+        'expo-location',
+        {
+          locationAlwaysAndWhenInUsePermission:
+            'Allow Ceylonify to use your location to show nearby experiences.',
+        },
+      ],
+      '@react-native-community/datetimepicker',
+      [
+        'expo-notifications',
+        {
+          icon: './assets/images/logo.png',
+          color: '#0EA5A4',
+          sounds: [],
+        },
+      ],
+    ],
+    experiments: {
+      typedRoutes: true,
+    },
+  },
+};

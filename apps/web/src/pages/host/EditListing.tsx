@@ -1,17 +1,41 @@
 import { useState, useEffect } from "react";
+import { gql } from "@apollo/client";
 import { useMutation, useQuery } from "@apollo/client/react";
 import { GET_LISTING, UPDATE_LISTING } from "./listings.gql";
+import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
+import { MAPS_LIBRARIES } from "../../lib/googleMaps";
+
+const ENHANCE_DESCRIPTION = gql`
+  mutation EnhanceDescriptionEdit($text: String!) {
+    enhanceDescription(text: $text)
+  }
+`;
 import { Input } from "../../ui/Input";
 import { Button } from "../../ui/Button";
 import { Card } from "../../ui/Card";
 import { DashboardLayout } from "../../layouts/DashboardLayout";
 import { useNavigate, useParams } from "react-router-dom";
+import { useFeatureFlags } from "../../auth/useFeatureFlags";
 
 type ListingType = "EVENT" | "RENTAL" | "ACCOMMODATION" | "ACTIVITY";
 type ListingCategory = "NATURE" | "CULTURE" | "ADVENTURE" | "FOOD" | "WELLNESS" | "BEACH" | "HERITAGE";
 
 export function EditListing() {
   const { id } = useParams<{ id: string }>();
+  const { isEnabledFor } = useFeatureFlags();
+  if (!isEnabledFor("HOST_LISTING_CREATION", "HOST")) {
+    return (
+      <DashboardLayout title="Edit Listing">
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <div className="text-5xl mb-4">🔒</div>
+          <h2 className="text-xl font-bold text-slate-700 mb-2">Feature Disabled</h2>
+          <p className="text-slate-400 text-sm max-w-sm">
+            Listing management has been temporarily disabled by the admin. Please check back later.
+          </p>
+        </div>
+      </DashboardLayout>
+    );
+  }
   const nav = useNavigate();
 
   const { data: initialData, loading: fetching } = useQuery(GET_LISTING, {
@@ -34,12 +58,31 @@ export function EditListing() {
   const [category, setCategory] = useState<ListingCategory | "">("");
   const [price, setPrice] = useState("");
   const [startDateTime, setStartDateTime] = useState("");
+  const [lat, setLat] = useState<number | null>(null);
+  const [lng, setLng] = useState<number | null>(null);
+  const [isPremium, setIsPremium] = useState(false);
 
   const [err, setErr] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [uploading, setUploading] = useState(false);
-  
+  const [aiApplied, setAiApplied] = useState(false);
+
   const [updateListing, { loading }] = useMutation(UPDATE_LISTING);
+  const [enhance, { loading: enhancing }] = useMutation(ENHANCE_DESCRIPTION);
+  const { isLoaded: mapsLoaded } = useJsApiLoader({
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string,
+    libraries: MAPS_LIBRARIES,
+  });
+
+  async function handleEnhance() {
+    if (!description.trim()) return;
+    setAiApplied(false);
+    const { data } = await enhance({ variables: { text: description } });
+    if (data?.enhanceDescription) {
+      setDescription(data.enhanceDescription);
+      setAiApplied(true);
+    }
+  }
 
   // Prepopulate state
   useEffect(() => {
@@ -53,7 +96,10 @@ export function EditListing() {
       setCategory((l.category as ListingCategory) || "");
       setPrice(l.price ? String(l.price) : "");
       setImagePreview(l.imageUrl || null);
-      
+      setLat(l.lat && l.lat !== 0 ? l.lat : null);
+      setLng(l.lng && l.lng !== 0 ? l.lng : null);
+      setIsPremium(l.isPremium ?? false);
+
       // format datetime for input
       if (l.startDateTime) {
         try {
@@ -109,11 +155,14 @@ export function EditListing() {
             ...(category ? { category } : {}),
             ...(price ? { price: Number(price) } : {}),
             ...(startDateTime ? { startDateTime } : {}),
+            ...(lat !== null ? { lat } : {}),
+            ...(lng !== null ? { lng } : {}),
+            isPremium,
           },
         },
       });
       setSuccess(true);
-      setTimeout(() => nav("/", { replace: true }), 800);
+      setTimeout(() => nav("/dashboard", { replace: true }), 800);
     } catch (e: unknown) {
       setUploading(false);
       const error = e as Error;
@@ -136,7 +185,7 @@ export function EditListing() {
       title="Edit Listing"
       subtitle="Update your experience details"
       actions={
-        <Button variant="ghost" onClick={() => nav("/")}>
+        <Button variant="ghost" onClick={() => nav("/dashboard")}>
           ← Back
         </Button>
       }
@@ -205,9 +254,22 @@ export function EditListing() {
                   placeholder="Describe the experience in detail..."
                   maxLength={1200}
                 />
-                <div className="mt-1 text-right text-xs font-semibold text-slate-400">
-                  {description.length}/1200
+                <div className="mt-1 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={handleEnhance}
+                    disabled={enhancing || !description.trim()}
+                    className="text-xs font-bold text-violet-600 hover:text-violet-800 disabled:opacity-40 transition-colors"
+                  >
+                    {enhancing ? "Enhancing…" : "✨ Enhance with AI"}
+                  </button>
+                  <span className="text-xs font-semibold text-slate-400">{description.length}/1200</span>
                 </div>
+                {aiApplied && (
+                  <p className="mt-1 text-xs text-violet-500 font-semibold">
+                    AI suggestion applied — edit freely.
+                  </p>
+                )}
               </label>
 
               <div className="grid gap-4 sm:grid-cols-2">
@@ -245,6 +307,19 @@ export function EditListing() {
                   </select>
                 </label>
               </div>
+
+              <label className="flex items-center gap-3 cursor-pointer group mt-2">
+                <input
+                  type="checkbox"
+                  checked={isPremium}
+                  onChange={(e) => setIsPremium(e.target.checked)}
+                  className="w-4 h-4 accent-violet-600"
+                />
+                <span className="text-xs font-bold uppercase text-slate-600 group-hover:text-slate-800">
+                  Premium-only listing{" "}
+                  <span className="text-slate-400 normal-case font-normal">(visible to premium subscribers only)</span>
+                </span>
+              </label>
             </div>
           </Card>
 
@@ -291,6 +366,35 @@ export function EditListing() {
                 onChange={(e) => setMapLink(e.target.value)}
                 placeholder="https://maps.app.goo.gl/..."
               />
+              <p className="text-xs text-slate-500">
+                Click anywhere on the map to move the pin, or drag it to fine-tune.
+              </p>
+              {mapsLoaded ? (
+                <GoogleMap
+                  mapContainerStyle={{ width: "100%", height: "300px", borderRadius: "10px" }}
+                  center={lat !== null && lng !== null ? { lat, lng } : { lat: 7.8731, lng: 80.7718 }}
+                  zoom={lat !== null ? 14 : 8}
+                  onClick={(e) => { if (e.latLng) { setLat(e.latLng.lat()); setLng(e.latLng.lng()); } }}
+                  options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false }}
+                >
+                  {lat !== null && lng !== null && (
+                    <Marker
+                      position={{ lat, lng }}
+                      draggable
+                      onDragEnd={(e) => { if (e.latLng) { setLat(e.latLng.lat()); setLng(e.latLng.lng()); } }}
+                    />
+                  )}
+                </GoogleMap>
+              ) : (
+                <div className="w-full h-72 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 text-sm font-semibold">
+                  Loading map…
+                </div>
+              )}
+              {lat !== null && lng !== null && (
+                <p className="text-xs text-slate-500 font-mono">
+                  📍 {lat.toFixed(6)}, {lng.toFixed(6)}
+                </p>
+              )}
             </div>
           </Card>
 

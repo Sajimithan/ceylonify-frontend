@@ -1,74 +1,175 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
-import { ChevronLeft, Bell, Calendar, Info, ShieldCheck } from 'lucide-react-native';
+import {
+  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  ActivityIndicator, RefreshControl,
+} from 'react-native';
+import { ChevronLeft, Bell, Heart, Calendar, Clock } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
+import { useGraphQL, gqlFetch } from '../src/hooks/useGraphQL';
+
+const MY_NOTIFICATIONS_QUERY = `
+  query MyNotifications {
+    myNotifications { id title body type read createdAt }
+  }
+`;
+const MARK_READ = `mutation MarkNotificationRead($notificationId: ID!) { markNotificationRead(notificationId: $notificationId) }`;
+const MARK_ALL_READ = `mutation MarkAllNotificationsRead { markAllNotificationsRead }`;
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function NotifIcon({ type }: { type: string }) {
+  if (type === 'SAVE') return (
+    <View style={[styles.iconBox, { backgroundColor: '#FEE2E2' }]}>
+      <Heart size={18} color="#EF4444" />
+    </View>
+  );
+  if (type === 'ITINERARY') return (
+    <View style={[styles.iconBox, { backgroundColor: '#DCFCE7' }]}>
+      <Calendar size={18} color="#16A34A" />
+    </View>
+  );
+  return (
+    <View style={[styles.iconBox, { backgroundColor: '#FEF3C7' }]}>
+      <Clock size={18} color="#D97706" />
+    </View>
+  );
+}
 
 export default function NotificationsScreen() {
-    const router = useRouter();
+  const router = useRouter();
+  const [refreshing, setRefreshing] = React.useState(false);
 
-    const notifications = [
-        {
-            id: '1',
-            title: 'Trip Starting Soon!',
-            body: 'Your journey to Galle Fort starts in 2 hours. Don\'t forget your camera!',
-            time: '1h ago',
-            icon: <Calendar size={20} color="#0EA5A4" />,
-            read: false
-        },
-        {
-            id: '2',
-            title: 'New Content Unlocked',
-            body: 'As a premium member, you now have access to "Secret Sunset in Hikkaduwa".',
-            time: '3h ago',
-            icon: <ShieldCheck size={20} color="#22C55E" />,
-            read: true
-        },
-        {
-            id: '3',
-            title: 'Weather Update',
-            body: 'Rain expected in Kandy today. We recommend indoor activities.',
-            time: '5h ago',
-            icon: <Info size={20} color="#F59E0B" />,
-            read: true
-        },
-    ];
+  const { data, loading, refetch } = useGraphQL<{ myNotifications: any[] }>(MY_NOTIFICATIONS_QUERY);
+  const notifications = data?.myNotifications ?? [];
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
-    return (
-        <View className="flex-1 bg-white">
-            <View className="px-6 py-4 flex-row items-center border-b border-border">
-                <TouchableOpacity onPress={() => router.back()}>
-                    <ChevronLeft size={24} color="#0B1220" />
-                </TouchableOpacity>
-                <Text className="text-text-primary text-xl font-bold ml-4">Notifications</Text>
-            </View>
+  async function onRefresh() {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
+  }
 
-            <ScrollView className="flex-1">
-                {notifications.length > 0 ? (
-                    notifications.map((item) => (
-                        <TouchableOpacity
-                            key={item.id}
-                            className={`px-6 py-5 border-b border-border flex-row ${item.read ? 'opacity-60' : 'bg-primary/5'}`}
-                        >
-                            <View className="bg-white p-3 rounded-2xl border border-border self-start shadow-sm">
-                                {item.icon}
-                            </View>
-                            <View className="flex-1 ml-4">
-                                <View className="flex-row justify-between items-start">
-                                    <Text className={`text-text-primary text-base ${item.read ? 'font-medium' : 'font-bold'}`}>{item.title}</Text>
-                                    <Text className="text-text-muted text-[10px] mt-1">{item.time}</Text>
-                                </View>
-                                <Text className="text-text-muted text-sm mt-1 leading-5">{item.body}</Text>
-                            </View>
-                            {!item.read && <View className="w-2 h-2 bg-primary rounded-full ml-2 mt-2" />}
-                        </TouchableOpacity>
-                    ))
-                ) : (
-                    <View className="flex-1 items-center justify-center pt-40">
-                        <Bell size={48} color="#E5E7EB" />
-                        <Text className="text-text-muted mt-4 font-bold">Inbox is empty</Text>
-                    </View>
-                )}
-            </ScrollView>
+  async function handleTap(notif: any) {
+    if (!notif.read) {
+      await gqlFetch(MARK_READ, { notificationId: notif.id }).catch(() => {});
+      refetch();
+    }
+  }
+
+  async function markAll() {
+    await gqlFetch(MARK_ALL_READ).catch(() => {});
+    refetch();
+  }
+
+  return (
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <ChevronLeft size={24} color="#0B1220" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Notifications</Text>
+        {unreadCount > 0 ? (
+          <TouchableOpacity onPress={markAll} style={styles.markAllBtn}>
+            <Text style={styles.markAllText}>Mark all read</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 80 }} />
+        )}
+      </View>
+
+      {loading && notifications.length === 0 ? (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#0EA5A4" />
         </View>
-    );
+      ) : (
+        <ScrollView
+          style={styles.list}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5A4" />}
+          showsVerticalScrollIndicator={false}
+        >
+          {notifications.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Bell size={56} color="#E5E7EB" />
+              <Text style={styles.emptyTitle}>All caught up!</Text>
+              <Text style={styles.emptyBody}>
+                Notifications for saved listings, itinerary additions, and event reminders will appear here.
+              </Text>
+            </View>
+          ) : (
+            notifications.map((item) => (
+              <TouchableOpacity
+                key={item.id}
+                style={[styles.item, !item.read && styles.itemUnread]}
+                onPress={() => handleTap(item)}
+                activeOpacity={0.7}
+              >
+                <NotifIcon type={item.type} />
+                <View style={styles.itemContent}>
+                  <View style={styles.itemTop}>
+                    <Text style={[styles.itemTitle, !item.read && styles.itemTitleBold]} numberOfLines={1}>
+                      {item.title}
+                    </Text>
+                    <Text style={styles.itemTime}>{timeAgo(item.createdAt)}</Text>
+                  </View>
+                  <Text style={styles.itemBody} numberOfLines={2}>{item.body}</Text>
+                </View>
+                {!item.read && <View style={styles.unreadDot} />}
+              </TouchableOpacity>
+            ))
+          )}
+          <View style={{ height: 32 }} />
+        </ScrollView>
+      )}
+    </View>
+  );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#F7FAFC' },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingTop: 52, paddingBottom: 16,
+    backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E5E7EB',
+  },
+  backBtn: { padding: 4 },
+  headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#0B1220' },
+  markAllBtn: { paddingHorizontal: 4 },
+  markAllText: { fontSize: 12, fontWeight: '600', color: '#0EA5A4' },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  list: { flex: 1 },
+  emptyState: {
+    alignItems: 'center', justifyContent: 'center',
+    paddingTop: 80, paddingHorizontal: 40,
+  },
+  emptyTitle: { fontSize: 18, fontWeight: 'bold', color: '#374151', marginTop: 16, marginBottom: 8 },
+  emptyBody: { fontSize: 13, color: '#9CA3AF', textAlign: 'center', lineHeight: 20 },
+  item: {
+    flexDirection: 'row', alignItems: 'flex-start',
+    paddingHorizontal: 16, paddingVertical: 14,
+    backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#F1F5F9',
+  },
+  itemUnread: { backgroundColor: '#F0FFFE' },
+  iconBox: {
+    width: 40, height: 40, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  itemContent: { flex: 1, marginLeft: 12 },
+  itemTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 3 },
+  itemTitle: { fontSize: 14, color: '#374151', flex: 1, marginRight: 8 },
+  itemTitleBold: { fontWeight: 'bold', color: '#0B1220' },
+  itemTime: { fontSize: 10, color: '#9CA3AF', flexShrink: 0 },
+  itemBody: { fontSize: 12, color: '#667085', lineHeight: 18 },
+  unreadDot: {
+    width: 8, height: 8, borderRadius: 999,
+    backgroundColor: '#0EA5A4', marginLeft: 8, marginTop: 4, flexShrink: 0,
+  },
+});

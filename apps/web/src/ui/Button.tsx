@@ -15,7 +15,7 @@ export function Button({
 
   switch (variant) {
     case "primary":
-      styles += "bg-sky-500 text-white active:bg-sky-600";
+      styles += "bg-brand-500 text-white hover:bg-brand-600 active:bg-brand-700";
       break;
     case "secondary":
       styles += "bg-slate-800 text-white active:bg-slate-900";

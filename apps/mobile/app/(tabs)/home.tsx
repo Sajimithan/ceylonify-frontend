@@ -1,62 +1,70 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  ActivityIndicator, StyleSheet, Image, RefreshControl
+  ActivityIndicator, StyleSheet, Image, RefreshControl,
 } from 'react-native';
-import { Search, MapPin, Bell, SlidersHorizontal } from 'lucide-react-native';
+import { Search, MapPin, Bell, CalendarDays } from 'lucide-react-native';
 import { useGraphQL } from '../../src/hooks/useGraphQL';
 import { useRouter } from 'expo-router';
+import { auth } from '../../src/lib/firebase';
 
-// Base API URL for image assets (strip /graphql from api url)
-const API_BASE = (process.env.EXPO_PUBLIC_API_URL ?? 'http://10.0.2.2:3000/graphql')
-  .replace('/graphql', '');
+const API_BASE = (process.env.EXPO_PUBLIC_API_URL ?? 'http://10.0.2.2:3000/graphql').replace('/graphql', '');
 
 function fixImageUrl(url?: string | null): string | null {
   if (!url) return null;
-  // Replace localhost with 10.0.2.2 for Android emulator compatibility
   return url.replace('http://localhost:3000', API_BASE);
 }
 
-const GET_FEED_QUERY = `
-  query GetFeed {
-    feed {
-      id
-      title
-      description
-      type
-      category
-      price
-      status
-      placeName
-      imageUrl
-      createdAt
-      lat
-      lng
+const NOTIFICATIONS_QUERY = `query MyNotifications { myNotifications { id read } }`;
+
+const SEARCH_LISTINGS = `
+  query SearchListings($category: String, $q: String, $limit: Int) {
+    searchListings(category: $category, q: $q, limit: $limit) {
+      listings {
+        id title description type category price placeName startDateTime imageUrl isPremium viewCount goingCount createdAt
+      }
+      total
     }
   }
 `;
 
-const CATEGORIES = ['All', 'EVENT', 'RENTAL', 'ACCOMMODATION', 'ACTIVITY'];
+const CATEGORIES = [
+  { label: 'All', value: null },
+  { label: 'Beaches', value: 'BEACH' },
+  { label: 'Adventures', value: 'ADVENTURE' },
+  { label: 'Food', value: 'FOOD' },
+  { label: 'Events', value: 'EVENT' },
+  { label: 'Rentals', value: 'RENTAL' },
+];
 
 export default function HomeScreen() {
   const router = useRouter();
-  const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [displayName, setDisplayName] = useState('Traveler');
 
-  const { data, loading, error, refetch } = useGraphQL<{ feed: any[] }>(GET_FEED_QUERY, {});
+  useEffect(() => {
+    const user = auth?.currentUser;
+    if (user?.displayName) {
+      setDisplayName(user.displayName.split(' ')[0]);
+    } else if (user?.email) {
+      setDisplayName(user.email.split('@')[0]);
+    }
+  }, []);
 
-  const allListings = data?.feed || [];
+  const variables: Record<string, any> = { limit: 20 };
+  if (selectedCategory) variables.category = selectedCategory;
+  if (searchQuery.trim()) variables.q = searchQuery.trim();
 
-  const listings = allListings.filter((l) => {
-    const matchCat = selectedCategory === 'All' || l.type === selectedCategory;
-    const matchSearch =
-      !searchQuery ||
-      l.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      l.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      l.placeName?.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchCat && matchSearch;
-  });
+  const { data, loading, error, refetch } = useGraphQL<{
+    searchListings: { listings: any[]; total: number };
+  }>(SEARCH_LISTINGS, variables);
+
+  const { data: notifData } = useGraphQL<{ myNotifications: { id: string; read: boolean }[] }>(NOTIFICATIONS_QUERY);
+  const unreadCount = (notifData?.myNotifications ?? []).filter((n) => !n.read).length;
+
+  const listings = data?.searchListings?.listings ?? [];
 
   async function onRefresh() {
     setRefreshing(true);
@@ -76,7 +84,7 @@ export default function HomeScreen() {
   if (error) {
     return (
       <View style={styles.errorContainer}>
-        <Text style={styles.errorTitle}>⚠️ Connection Error</Text>
+        <Text style={styles.errorTitle}>Connection Error</Text>
         <Text style={styles.errorMessage}>{error.message}</Text>
         <TouchableOpacity onPress={() => refetch()} style={styles.retryButton}>
           <Text style={styles.retryButtonText}>Try Again</Text>
@@ -92,12 +100,20 @@ export default function HomeScreen() {
         <View>
           <Text style={styles.exploreText}>EXPLORE SRI LANKA</Text>
           <View style={styles.greetingRow}>
-            <Text style={styles.greetingText}>Ayubowan, Traveler</Text>
+            <Text style={styles.greetingText}>Ayubowan, {displayName}</Text>
             <MapPin size={18} color="#0EA5A4" style={{ marginLeft: 8 }} />
           </View>
         </View>
-        <TouchableOpacity style={styles.notificationButton}>
+        <TouchableOpacity
+          style={styles.notificationButton}
+          onPress={() => router.push('/notifications' as any)}
+        >
           <Bell size={20} color="#0B1220" />
+          {unreadCount > 0 && (
+            <View style={styles.notifBadge}>
+              <Text style={styles.notifBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+            </View>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -125,31 +141,26 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Category Filter Tabs */}
+        {/* Category Filter */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.categoryList}
         >
-          {CATEGORIES.map((cat) => (
-            <TouchableOpacity
-              key={cat}
-              onPress={() => setSelectedCategory(cat)}
-              style={[
-                styles.categoryChip,
-                selectedCategory === cat && styles.categoryChipActive,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.categoryChipText,
-                  selectedCategory === cat && styles.categoryChipTextActive,
-                ]}
+          {CATEGORIES.map((cat) => {
+            const active = selectedCategory === cat.value;
+            return (
+              <TouchableOpacity
+                key={cat.label}
+                onPress={() => setSelectedCategory(cat.value)}
+                style={[styles.categoryChip, active && styles.categoryChipActive]}
               >
-                {cat}
-              </Text>
-            </TouchableOpacity>
-          ))}
+                <Text style={[styles.categoryChipText, active && styles.categoryChipTextActive]}>
+                  {cat.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
 
         {/* Section title */}
@@ -161,10 +172,9 @@ export default function HomeScreen() {
           </Text>
         </View>
 
-        {/* Listing Cards */}
         {listings.length === 0 && !loading && (
           <View style={styles.emptyBox}>
-            <Text style={styles.emptyText}>🌴 No listings match your search.</Text>
+            <Text style={styles.emptyText}>No listings match your search.</Text>
             <Text style={styles.emptySubtext}>Try a different category or search term.</Text>
           </View>
         )}
@@ -178,47 +188,55 @@ export default function HomeScreen() {
               activeOpacity={0.85}
               onPress={() => router.push(`/listing/${listing.id}`)}
             >
-              {/* Cover Image */}
               {imageUrl ? (
-                <Image
-                  source={{ uri: imageUrl }}
-                  style={styles.listingImage}
-                  resizeMode="cover"
-                />
+                <Image source={{ uri: imageUrl }} style={styles.listingImage} resizeMode="cover" />
               ) : (
                 <View style={styles.listingImagePlaceholder}>
                   <Text style={styles.listingImagePlaceholderText}>🏝️</Text>
                 </View>
               )}
 
-              {/* Type Badge (floating on image) */}
+              {listing.isPremium && (
+                <View style={styles.premiumBadge}>
+                  <Text style={styles.premiumBadgeText}>PREMIUM</Text>
+                </View>
+              )}
+
               <View style={styles.typeBadge}>
                 <Text style={styles.typeBadgeText}>{listing.type}</Text>
               </View>
 
-              {/* Card Body */}
               <View style={styles.listingBody}>
                 <View style={styles.listingHeader}>
-                  <Text style={styles.listingTitle} numberOfLines={1}>
-                    {listing.title}
-                  </Text>
-                  {listing.price && (
+                  <Text style={styles.listingTitle} numberOfLines={1}>{listing.title}</Text>
+                  {listing.price ? (
                     <Text style={styles.listingPrice}>LKR {listing.price}</Text>
+                  ) : (
+                    <Text style={styles.listingPriceFree}>Free</Text>
                   )}
                 </View>
 
                 {listing.placeName && (
                   <View style={styles.locationRow}>
                     <MapPin size={13} color="#0EA5A4" />
-                    <Text style={styles.locationText} numberOfLines={1}>
-                      {listing.placeName}
+                    <Text style={styles.locationText} numberOfLines={1}>{listing.placeName}</Text>
+                  </View>
+                )}
+                {listing.startDateTime && (
+                  <View style={styles.locationRow}>
+                    <CalendarDays size={13} color="#94A3B8" />
+                    <Text style={styles.eventDateText} numberOfLines={1}>
+                      {new Date(listing.startDateTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                     </Text>
                   </View>
                 )}
+                {listing.type === 'EVENT' && (listing.goingCount ?? 0) > 0 && (
+                  <View style={styles.goingRow}>
+                    <Text style={styles.goingText}>👥 {listing.goingCount} going</Text>
+                  </View>
+                )}
 
-                <Text style={styles.listingDescription} numberOfLines={2}>
-                  {listing.description}
-                </Text>
+                <Text style={styles.listingDescription} numberOfLines={2}>{listing.description}</Text>
 
                 <View style={styles.listingFooter}>
                   {listing.category ? (
@@ -258,8 +276,15 @@ const styles = StyleSheet.create({
   greetingText: { color: '#0B1220', fontSize: 20, fontWeight: 'bold' },
   notificationButton: {
     backgroundColor: '#F1F5F9', padding: 10, borderRadius: 999,
-    borderWidth: 1, borderColor: '#E5E7EB',
+    borderWidth: 1, borderColor: '#E5E7EB', position: 'relative',
   },
+  notifBadge: {
+    position: 'absolute', top: -4, right: -4,
+    backgroundColor: '#EF4444', borderRadius: 999, minWidth: 18, height: 18,
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3,
+    borderWidth: 1.5, borderColor: '#FFFFFF',
+  },
+  notifBadgeText: { color: '#FFFFFF', fontSize: 9, fontWeight: 'bold' },
   scrollView: { flex: 1 },
   searchSection: { paddingHorizontal: 16, paddingVertical: 14 },
   searchBar: {
@@ -285,16 +310,17 @@ const styles = StyleSheet.create({
   listingCard: {
     marginHorizontal: 16, marginBottom: 18,
     backgroundColor: '#FFFFFF', borderRadius: 16,
-    borderWidth: 1, borderColor: '#E5E7EB',
-    overflow: 'hidden',
+    borderWidth: 1, borderColor: '#E5E7EB', overflow: 'hidden',
     shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 4,
   },
   listingImage: { width: '100%', height: 180 },
-  listingImagePlaceholder: {
-    width: '100%', height: 160, backgroundColor: '#F1F5F9',
-    alignItems: 'center', justifyContent: 'center',
-  },
+  listingImagePlaceholder: { width: '100%', height: 160, backgroundColor: '#F1F5F9', alignItems: 'center', justifyContent: 'center' },
   listingImagePlaceholderText: { fontSize: 48 },
+  premiumBadge: {
+    position: 'absolute', top: 12, right: 12,
+    backgroundColor: 'rgba(245,158,11,0.9)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999,
+  },
+  premiumBadgeText: { color: '#FFFFFF', fontSize: 9, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.5 },
   typeBadge: {
     position: 'absolute', top: 12, left: 12,
     backgroundColor: 'rgba(14,165,164,0.9)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999,
@@ -304,8 +330,12 @@ const styles = StyleSheet.create({
   listingHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 },
   listingTitle: { flex: 1, fontSize: 17, fontWeight: 'bold', color: '#0B1220', marginRight: 8 },
   listingPrice: { fontSize: 15, fontWeight: 'bold', color: '#0EA5A4' },
+  listingPriceFree: { fontSize: 13, fontWeight: '600', color: '#10B981' },
   locationRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   locationText: { fontSize: 12, color: '#667085', marginLeft: 4, flex: 1 },
+  eventDateText: { fontSize: 12, color: '#94A3B8', marginLeft: 4, flex: 1 },
+  goingRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  goingText: { fontSize: 11, color: '#059669', fontWeight: '700', backgroundColor: '#ECFDF5', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999 },
   listingDescription: { fontSize: 13, color: '#6B7280', lineHeight: 19, marginBottom: 12 },
   listingFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   categoryTag: { backgroundColor: '#F0FDF4', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: '#BBF7D0' },

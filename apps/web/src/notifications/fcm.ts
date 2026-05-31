@@ -23,9 +23,7 @@ export function listenForegroundMessages() {
 
   onMessage(messaging, (payload) => {
     console.log("Foreground message:", payload);
-    // Simple UX: browser alert (replace later with toast)
-    const title = payload.notification?.title ?? "Ceylonify";
-    const body = payload.notification?.body ?? "You have a new notification";
-    alert(`${title}\n\n${body}`);
+    // Dispatch custom event so NotificationBell can refetch without a page reload
+    window.dispatchEvent(new CustomEvent("ceylonify:notification", { detail: payload }));
   });
 }

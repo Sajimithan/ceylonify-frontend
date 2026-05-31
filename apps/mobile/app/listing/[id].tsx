@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, Image, TouchableOpacity,
-  ActivityIndicator, Linking, StyleSheet
+  ActivityIndicator, Linking, StyleSheet, Alert, Modal, TextInput,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ChevronLeft, Share2, Heart, MapPin, Clock, Tag, Navigation } from 'lucide-react-native';
-import { useGraphQL } from '../../src/hooks/useGraphQL';
+import { ChevronLeft, Share2, Heart, MapPin, Clock, Tag, Navigation, Cloud, Flag, X as XIcon, Plus } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { useGraphQL, gqlFetch } from '../../src/hooks/useGraphQL';
+import { WebView } from 'react-native-webview';
 
-const API_BASE = (process.env.EXPO_PUBLIC_API_URL ?? 'http://10.0.2.2:3000/graphql')
-  .replace('/graphql', '');
+const API_BASE = (process.env.EXPO_PUBLIC_API_URL ?? 'http://10.0.2.2:3000/graphql').replace('/graphql', '');
+const WEATHER_KEY = process.env.EXPO_PUBLIC_WEATHER_API_KEY;
 
 function fixImageUrl(url?: string | null): string | null {
   if (!url) return null;
@@ -18,42 +20,212 @@ function fixImageUrl(url?: string | null): string | null {
 const GET_LISTING_QUERY = `
   query GetListing($id: String!) {
     listing(id: $id) {
-      id
-      title
-      description
-      type
-      category
-      price
-      status
-      placeName
-      mapLink
-      imageUrl
-      createdAt
-      lat
-      lng
+      id title description type category price startDateTime
+      status placeName mapLink imageUrl isPremium viewCount
+      createdAt lat lng
     }
   }
 `;
 
+const SAVED_LISTINGS_QUERY = `query SavedListings { savedListings { id } }`;
+const SAVE_MUTATION = `mutation SaveListing($listingId: ID!) { saveListing(listingId: $listingId) }`;
+const UNSAVE_MUTATION = `mutation UnsaveListing($listingId: ID!) { unsaveListing(listingId: $listingId) }`;
+const REPORT_MUTATION = `mutation ReportListing($listingId: ID!, $reason: String!, $comment: String, $imageUrls: [String]) {
+  reportListing(listingId: $listingId, reason: $reason, comment: $comment, imageUrls: $imageUrls)
+}`;
+
+const REPORT_SUGGESTIONS = ['Inaccurate information', 'Inappropriate content', 'Scam or fraud', 'Duplicate listing', 'Other'];
+
+const GMAPS_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY ?? 'AIzaSyCAisocwaWcaNQxbt2MM9Kahvu-h3a24gc';
+
+function buildMapPreviewHtml(lat: number, lng: number): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <style>* { margin:0; padding:0; } #map { width:100vw; height:100vh; }</style>
+</head>
+<body>
+<div id="map"></div>
+<script>
+  function initMap() {
+    var center = { lat: ${lat}, lng: ${lng} };
+    var map = new google.maps.Map(document.getElementById('map'), {
+      center: center, zoom: 15,
+      disableDefaultUI: true,
+      gestureHandling: 'none',
+    });
+    new google.maps.Marker({
+      position: center, map: map,
+      icon: {
+        path: google.maps.SymbolPath.CIRCLE,
+        fillColor: '#0EA5A4', fillOpacity: 1,
+        strokeColor: '#FFFFFF', strokeWeight: 3, scale: 10,
+      },
+    });
+  }
+</script>
+<script src="https://maps.googleapis.com/maps/api/js?key=${GMAPS_KEY}&callback=initMap&loading=async" defer></script>
+</body>
+</html>`;
+}
+
+interface WeatherData {
+  temp: number;
+  description: string;
+  icon: string;
+}
+
+function WeatherWidget({ lat, lng }: { lat: number; lng: number }) {
+  const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!WEATHER_KEY || lat === 0 || lng === 0) { setLoading(false); return; }
+    fetch(
+      `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&units=metric&appid=${WEATHER_KEY}`,
+    )
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.main) {
+          setWeather({
+            temp: Math.round(d.main.temp),
+            description: d.weather[0]?.description ?? '',
+            icon: d.weather[0]?.main ?? '',
+          });
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [lat, lng]);
+
+  if (!WEATHER_KEY || lat === 0 || lng === 0) return null;
+  if (loading) return null;
+  if (!weather) return null;
+
+  const emoji = weather.icon === 'Clear' ? '☀️'
+    : weather.icon === 'Clouds' ? '☁️'
+    : weather.icon === 'Rain' ? '🌧️'
+    : weather.icon === 'Thunderstorm' ? '⛈️'
+    : weather.icon === 'Snow' ? '❄️'
+    : '🌤️';
+
+  return (
+    <View style={weatherStyles.container}>
+      <Cloud size={16} color="#0EA5A4" />
+      <Text style={weatherStyles.text}>
+        {emoji} {weather.temp}°C — {weather.description}
+      </Text>
+    </View>
+  );
+}
+
+const weatherStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#E0F6F6', borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 8, gap: 8, marginBottom: 10,
+  },
+  text: { fontSize: 13, color: '#0B7A79', fontWeight: '600' },
+});
+
 export default function ListingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const [saved, setSaved] = useState(false);
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [reportVisible, setReportVisible] = useState(false);
+  const [reportReason, setReportReason] = useState('');
+  const [reportComment, setReportComment] = useState('');
+  const [reportImages, setReportImages] = useState<{ uri: string; name: string }[]>([]);
+  const [reportSubmitting, setReportSubmitting] = useState(false);
 
-  const { data, loading, error } = useGraphQL<{ listing: any }>(
-    GET_LISTING_QUERY,
-    { id },
-  );
+  const { data, loading, error } = useGraphQL<{ listing: any }>(GET_LISTING_QUERY, { id });
+  const { data: savedData } = useGraphQL<{ savedListings: { id: string }[] }>(SAVED_LISTINGS_QUERY);
+
+  useEffect(() => {
+    if (savedData?.savedListings && id) {
+      setSaved(savedData.savedListings.some((s) => s.id === id));
+    }
+  }, [savedData, id]);
 
   const listing = data?.listing;
 
+  async function toggleSave() {
+    if (!listing || saveLoading) return;
+    setSaveLoading(true);
+    try {
+      if (saved) {
+        await gqlFetch(UNSAVE_MUTATION, { listingId: listing.id });
+        setSaved(false);
+      } else {
+        await gqlFetch(SAVE_MUTATION, { listingId: listing.id });
+        setSaved(true);
+      }
+    } catch {
+      // silent
+    } finally {
+      setSaveLoading(false);
+    }
+  }
+
   const openInMaps = () => {
     if (!listing) return;
-    if (listing.mapLink) {
+    if (listing.lat && listing.lng && listing.lat !== 0 && listing.lng !== 0) {
+      Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${listing.lat},${listing.lng}`);
+    } else if (listing.mapLink) {
       Linking.openURL(listing.mapLink);
-    } else if (listing.lat && listing.lng) {
-      Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${listing.lat},${listing.lng}`);
     }
   };
+
+  async function pickReportImage() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission required', 'Allow photo library access to attach evidence.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: false,
+      quality: 0.8,
+    });
+    if (result.canceled) return;
+    const asset = result.assets[0];
+    const name = `report_${Date.now()}.jpg`;
+    setReportImages((prev) => [...prev, { uri: asset.uri, name }]);
+  }
+
+  async function submitReport() {
+    if (!reportReason.trim() || !listing) return;
+    setReportSubmitting(true);
+    try {
+      const uploadedUrls: string[] = [];
+      for (const img of reportImages) {
+        const formData = new FormData();
+        formData.append('file', { uri: img.uri, name: img.name, type: 'image/jpeg' } as any);
+        const res = await fetch(`${API_BASE}/upload`, { method: 'POST', body: formData });
+        if (res.ok) {
+          const data = await res.json();
+          uploadedUrls.push(`${API_BASE}${data.url}`);
+        }
+      }
+      await gqlFetch(REPORT_MUTATION, {
+        listingId: listing.id,
+        reason: reportReason.trim(),
+        comment: reportComment.trim() || undefined,
+        imageUrls: uploadedUrls.length > 0 ? uploadedUrls : undefined,
+      });
+      setReportVisible(false);
+      setReportReason('');
+      setReportComment('');
+      setReportImages([]);
+      Alert.alert('Report submitted', 'Thank you. Our team will review this listing.');
+    } catch {
+      Alert.alert('Error', 'Could not submit report. Please try again.');
+    } finally {
+      setReportSubmitting(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -67,7 +239,7 @@ export default function ListingDetailScreen() {
   if (error || !listing) {
     return (
       <View style={styles.errorContainer}>
-        <Text style={styles.errorTitle}>⚠️ Not Found</Text>
+        <Text style={styles.errorTitle}>Not Found</Text>
         <Text style={styles.errorMessage}>{error?.message ?? 'This listing could not be loaded.'}</Text>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Text style={styles.backButtonText}>← Go Back</Text>
@@ -77,7 +249,7 @@ export default function ListingDetailScreen() {
   }
 
   const imageUrl = fixImageUrl(listing.imageUrl);
-  const hasLocation = (listing.lat && listing.lng) || listing.mapLink;
+  const hasLocation = (listing.lat && listing.lng && listing.lat !== 0) || listing.mapLink;
 
   return (
     <View style={styles.container}>
@@ -92,36 +264,43 @@ export default function ListingDetailScreen() {
             </View>
           )}
 
-          {/* Back & Share Buttons */}
           <View style={styles.imageOverlayButtons}>
             <TouchableOpacity onPress={() => router.back()} style={styles.circleButton}>
               <ChevronLeft size={22} color="#0B1220" />
             </TouchableOpacity>
             <View style={styles.rightButtons}>
-              <TouchableOpacity style={styles.circleButton}>
-                <Share2 size={20} color="#0B1220" />
+              <TouchableOpacity style={styles.circleButton} onPress={() => setReportVisible(true)}>
+                <Flag size={20} color="#0B1220" />
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.circleButton, { marginLeft: 10 }]}>
-                <Heart size={20} color="#0B1220" />
+              <TouchableOpacity
+                onPress={toggleSave}
+                disabled={saveLoading}
+                style={[styles.circleButton, { marginLeft: 10 }]}
+              >
+                {saveLoading
+                  ? <ActivityIndicator size="small" color="#EF4444" />
+                  : <Heart size={20} color={saved ? '#EF4444' : '#0B1220'} fill={saved ? '#EF4444' : 'none'} />
+                }
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* Type Badge on image */}
           <View style={styles.typeBadge}>
             <Text style={styles.typeBadgeText}>{listing.type}</Text>
           </View>
+
+          {listing.isPremium && (
+            <View style={styles.premiumBadge}>
+              <Text style={styles.premiumBadgeText}>PREMIUM</Text>
+            </View>
+          )}
         </View>
 
-        {/* Content Card */}
+        {/* Content */}
         <View style={styles.contentCard}>
-          {/* Category + Title */}
-          {listing.category && (
-            <Text style={styles.categoryLabel}>{listing.category}</Text>
-          )}
+          {listing.category && <Text style={styles.categoryLabel}>{listing.category}</Text>}
           <Text style={styles.title}>{listing.title}</Text>
 
-          {/* Location */}
           {listing.placeName && (
             <View style={styles.infoRow}>
               <MapPin size={15} color="#0EA5A4" />
@@ -129,40 +308,66 @@ export default function ListingDetailScreen() {
             </View>
           )}
 
-          {/* Date / Created At */}
-          <View style={styles.infoRow}>
-            <Clock size={15} color="#0EA5A4" />
-            <Text style={styles.infoText}>
-              Listed {new Date(listing.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-            </Text>
-          </View>
+          {listing.startDateTime && (
+            <View style={styles.infoRow}>
+              <Clock size={15} color="#0EA5A4" />
+              <Text style={styles.infoText}>
+                {new Date(listing.startDateTime).toLocaleDateString('en-US', {
+                  weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
+                })}
+              </Text>
+            </View>
+          )}
 
-          {/* Price */}
-          {listing.price && (
+          {listing.price ? (
             <View style={styles.infoRow}>
               <Tag size={15} color="#0EA5A4" />
               <Text style={[styles.infoText, { fontWeight: 'bold', color: '#0EA5A4' }]}>
                 LKR {listing.price}
               </Text>
             </View>
-          )}
+          ) : null}
 
-          {/* Divider */}
           <View style={styles.divider} />
 
-          {/* Description */}
           <Text style={styles.sectionTitle}>About this Experience</Text>
           <Text style={styles.description}>{listing.description}</Text>
 
-          {/* Map Preview / Directions */}
           {hasLocation && (
             <>
               <View style={styles.divider} />
               <Text style={styles.sectionTitle}>Location</Text>
-              <TouchableOpacity onPress={openInMaps} style={styles.directionsButton}>
-                <Navigation size={18} color="#FFFFFF" />
-                <Text style={styles.directionsButtonText}>Open in Google Maps</Text>
-              </TouchableOpacity>
+
+              {listing.lat !== 0 && listing.lng !== 0 && (
+                <>
+                  <WeatherWidget lat={listing.lat} lng={listing.lng} />
+                  <TouchableOpacity
+                    onPress={openInMaps}
+                    activeOpacity={0.9}
+                    style={styles.mapPreviewContainer}
+                  >
+                    <WebView
+                      source={{ html: buildMapPreviewHtml(listing.lat, listing.lng) }}
+                      style={styles.mapPreview}
+                      javaScriptEnabled
+                      domStorageEnabled
+                      scrollEnabled={false}
+                      pointerEvents="none"
+                    />
+                    <View style={styles.mapPreviewOverlay}>
+                      <Navigation size={14} color="#FFFFFF" />
+                      <Text style={styles.mapPreviewOverlayText}>Open in Google Maps</Text>
+                    </View>
+                  </TouchableOpacity>
+                </>
+              )}
+
+              {(listing.lat === 0 || listing.lng === 0) && listing.mapLink && (
+                <TouchableOpacity onPress={openInMaps} style={styles.directionsButton}>
+                  <Navigation size={18} color="#FFFFFF" />
+                  <Text style={styles.directionsButtonText}>Open in Google Maps</Text>
+                </TouchableOpacity>
+              )}
             </>
           )}
 
@@ -182,6 +387,91 @@ export default function ListingDetailScreen() {
           <Text style={styles.bookButtonText}>Book Now</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Report modal */}
+      <Modal visible={reportVisible} animationType="slide" transparent onRequestClose={() => setReportVisible(false)}>
+        <View style={reportStyles.overlay}>
+          <ScrollView style={reportStyles.sheet} contentContainerStyle={{ paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+              <Text style={reportStyles.title}>Report Listing</Text>
+              <TouchableOpacity onPress={() => setReportVisible(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <XIcon size={20} color="#667085" />
+              </TouchableOpacity>
+            </View>
+            <Text style={reportStyles.subtitle}>Select a suggestion or describe your reason below.</Text>
+
+            {/* Suggestion chips */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }} contentContainerStyle={{ gap: 8, paddingRight: 4 }}>
+              {REPORT_SUGGESTIONS.map((s) => (
+                <TouchableOpacity
+                  key={s}
+                  style={[reportStyles.chip, reportReason === s && reportStyles.chipActive]}
+                  onPress={() => setReportReason(s)}
+                >
+                  <Text style={[reportStyles.chipText, reportReason === s && reportStyles.chipTextActive]}>{s}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {/* Free-text reason */}
+            <TextInput
+              style={reportStyles.reasonInput}
+              placeholder="Describe your reason… (required)"
+              placeholderTextColor="#9CA3AF"
+              value={reportReason}
+              onChangeText={setReportReason}
+              multiline
+              numberOfLines={2}
+            />
+
+            {/* Additional comment */}
+            <TextInput
+              style={reportStyles.commentInput}
+              placeholder="Additional comments (optional)"
+              placeholderTextColor="#9CA3AF"
+              value={reportComment}
+              onChangeText={setReportComment}
+              multiline
+              numberOfLines={3}
+            />
+
+            {/* Image attachments */}
+            <Text style={reportStyles.photoLabel}>Add Photos (optional)</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+              {reportImages.map((img, i) => (
+                <View key={i} style={{ position: 'relative' }}>
+                  <Image source={{ uri: img.uri }} style={reportStyles.thumb} />
+                  <TouchableOpacity
+                    style={reportStyles.thumbRemove}
+                    onPress={() => setReportImages((prev) => prev.filter((_, idx) => idx !== i))}
+                  >
+                    <XIcon size={10} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+              {reportImages.length < 3 && (
+                <TouchableOpacity style={reportStyles.addPhotoBtn} onPress={pickReportImage}>
+                  <Plus size={20} color="#9CA3AF" />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <View style={reportStyles.actions}>
+              <TouchableOpacity style={reportStyles.cancelBtn} onPress={() => setReportVisible(false)}>
+                <Text style={reportStyles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[reportStyles.submitBtn, (!reportReason.trim() || reportSubmitting) && { opacity: 0.5 }]}
+                onPress={submitReport}
+                disabled={!reportReason.trim() || reportSubmitting}
+              >
+                <Text style={reportStyles.submitText}>{reportSubmitting ? 'Submitting…' : 'Submit Report'}</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -205,16 +495,19 @@ const styles = StyleSheet.create({
   },
   rightButtons: { flexDirection: 'row' },
   circleButton: {
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    padding: 10, borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.92)', padding: 10, borderRadius: 999,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 4, elevation: 4,
   },
   typeBadge: {
     position: 'absolute', bottom: 16, left: 16,
-    backgroundColor: 'rgba(14,165,164,0.9)',
-    paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999,
+    backgroundColor: 'rgba(14,165,164,0.9)', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999,
   },
   typeBadgeText: { color: '#FFF', fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 1 },
+  premiumBadge: {
+    position: 'absolute', bottom: 16, right: 16,
+    backgroundColor: 'rgba(245,158,11,0.9)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999,
+  },
+  premiumBadgeText: { color: '#FFF', fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' },
   contentCard: {
     backgroundColor: '#FFF', borderTopLeftRadius: 28, borderTopRightRadius: 28,
     marginTop: -24, padding: 24,
@@ -228,10 +521,22 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 17, fontWeight: 'bold', color: '#0B1220', marginBottom: 10 },
   description: { fontSize: 14, color: '#6B7280', lineHeight: 22 },
   directionsButton: {
-    backgroundColor: '#0EA5A4', flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    paddingVertical: 14, borderRadius: 14,
+    backgroundColor: '#0EA5A4', flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'center', paddingVertical: 14, borderRadius: 14,
   },
   directionsButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 15, marginLeft: 8 },
+  mapPreviewContainer: {
+    height: 180, borderRadius: 14, overflow: 'hidden',
+    marginBottom: 12, position: 'relative',
+  },
+  mapPreview: { width: '100%', height: '100%' },
+  mapPreviewOverlay: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    backgroundColor: 'rgba(14,165,164,0.88)',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 10, gap: 6,
+  },
+  mapPreviewOverlayText: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
   floatingCTA: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center',
@@ -244,4 +549,54 @@ const styles = StyleSheet.create({
   ctaPriceValue: { fontSize: 20, fontWeight: 'bold', color: '#0B1220' },
   bookButton: { backgroundColor: '#0EA5A4', paddingHorizontal: 32, paddingVertical: 14, borderRadius: 999 },
   bookButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
+});
+
+const reportStyles = StyleSheet.create({
+  overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' },
+  sheet: {
+    backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    paddingHorizontal: 24, paddingTop: 24, maxHeight: '90%',
+  },
+  title: { fontSize: 18, fontWeight: 'bold', color: '#0B1220', marginBottom: 4 },
+  subtitle: { fontSize: 13, color: '#667085', marginBottom: 12 },
+  chip: {
+    borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 999,
+    paddingHorizontal: 14, paddingVertical: 8,
+  },
+  chipActive: { borderColor: '#0EA5A4', backgroundColor: '#E0F6F6' },
+  chipText: { fontSize: 13, color: '#374151' },
+  chipTextActive: { color: '#0B7A79', fontWeight: '600' },
+  reasonInput: {
+    borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10,
+    paddingHorizontal: 14, paddingVertical: 10, fontSize: 13, color: '#374151',
+    marginBottom: 10, textAlignVertical: 'top', minHeight: 60,
+  },
+  commentInput: {
+    borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10,
+    paddingHorizontal: 14, paddingVertical: 10, fontSize: 13, color: '#374151',
+    marginBottom: 14, textAlignVertical: 'top',
+  },
+  photoLabel: { fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 8 },
+  thumb: { width: 72, height: 72, borderRadius: 10 },
+  thumbRemove: {
+    position: 'absolute', top: -6, right: -6,
+    backgroundColor: '#EF4444', borderRadius: 999, width: 18, height: 18,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  addPhotoBtn: {
+    width: 72, height: 72, borderRadius: 10,
+    borderWidth: 1, borderColor: '#E5E7EB', borderStyle: 'dashed',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  actions: { flexDirection: 'row', gap: 12 },
+  cancelBtn: {
+    flex: 1, borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 999,
+    paddingVertical: 14, alignItems: 'center',
+  },
+  cancelText: { color: '#667085', fontWeight: '600' },
+  submitBtn: {
+    flex: 2, backgroundColor: '#EF4444', borderRadius: 999,
+    paddingVertical: 14, alignItems: 'center',
+  },
+  submitText: { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
 });

@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@apollo/client/react";
+import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { DashboardLayout } from "../../layouts/DashboardLayout";
 import { Button } from "../../ui/Button";
-import { ADMIN_ALL_USERS, ADMIN_CHANGE_USER_ROLE } from "./admin.gql";
+import { ADMIN_ALL_USERS, ADMIN_CHANGE_USER_ROLE, ADMIN_UPDATE_SUBSCRIPTION, ADMIN_UPDATE_USER_PHONE } from "./admin.gql";
 
 type UserRecord = {
   id: string;
@@ -11,20 +12,54 @@ type UserRecord = {
   email?: string;
   role: string;
   createdAt: string;
+  badgeLevel?: string;
+  approvedCount?: number;
+  phone?: string;
+};
+
+const BADGE_EMOJI: Record<string, string> = {
+  BRONZE: "🥉",
+  SILVER: "🥈",
+  GOLD: "🥇",
+  DIAMOND: "💎",
+};
+
+const BADGE_STYLE: Record<string, string> = {
+  BRONZE: "bg-amber-50 text-amber-700 border-amber-200",
+  SILVER: "bg-slate-100 text-slate-600 border-slate-300",
+  GOLD: "bg-yellow-50 text-yellow-700 border-yellow-300",
+  DIAMOND: "bg-cyan-50 text-cyan-700 border-cyan-300",
 };
 
 type UsersData = {
   adminAllUsers: UserRecord[];
 };
 
+function userAvatarColor(role: string) {
+  if (role === "ADMIN") return "bg-slate-800 text-white";
+  if (role === "HOST")  return "bg-violet-100 text-violet-700";
+  return "bg-brand-100 text-brand-700";
+}
+
+function userInitials(email?: string) {
+  if (!email) return "?";
+  return email.split("@")[0].slice(0, 2).toUpperCase();
+}
+
 export function AdminUsers() {
+  const nav = useNavigate();
   const { data, loading, error, refetch } = useQuery<UsersData>(ADMIN_ALL_USERS, {
     fetchPolicy: "network-only",
   });
-  
+
   const [changeRole, { loading: updating }] = useMutation(ADMIN_CHANGE_USER_ROLE);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [updateSubscription, { loading: updatingSub }] = useMutation(ADMIN_UPDATE_SUBSCRIPTION);
+  const [updatePhone] = useMutation(ADMIN_UPDATE_USER_PHONE);
+  const [editingId, setEditingId]     = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState("TRAVELER");
+  const [search, setSearch]           = useState("");
+  const [editingPhoneUid, setEditingPhoneUid] = useState<string | null>(null);
+  const [phoneInput, setPhoneInput]   = useState("");
 
   async function handleRoleChange(id: string) {
     if (!editingId) return;
@@ -37,6 +72,25 @@ export function AdminUsers() {
     }
   }
 
+  async function handleSavePhone(firebaseUid: string) {
+    if (!phoneInput.trim()) return;
+    try {
+      await updatePhone({ variables: { firebaseUid, phone: phoneInput.trim() } });
+      setEditingPhoneUid(null);
+      setPhoneInput("");
+      await refetch();
+    } catch (e) {
+      console.error("Failed to update phone", e);
+    }
+  }
+
+  const filteredUsers = (data?.adminAllUsers ?? []).filter(
+    (u) =>
+      !search ||
+      (u.email ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      u.role.toLowerCase().includes(search.toLowerCase()),
+  );
+
   return (
     <DashboardLayout
       title="User Management"
@@ -47,7 +101,7 @@ export function AdminUsers() {
             Refresh
           </Button>
           <Link to="/admin">
-            <Button variant="ghost" className="text-white border border-white">
+            <Button variant="ghost" className="text-white border border-white/40">
               Back to Overview
             </Button>
           </Link>
@@ -55,48 +109,139 @@ export function AdminUsers() {
       }
     >
       <div className="mx-auto w-full max-w-7xl">
-        {loading && <div className="text-slate-500 font-bold mb-4">Loading users...</div>}
+        {loading && (
+          <div className="bg-white rounded-xl shadow p-8 text-center text-slate-400 font-semibold mb-4">
+            Loading users…
+          </div>
+        )}
         {error && (
-          <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700 font-bold mb-4">
+          <div className="rounded-xl bg-red-50 p-4 text-sm text-red-700 font-bold mb-4 border border-red-200">
             {error.message}
           </div>
         )}
 
+        {/* Search bar */}
+        <div className="bg-white rounded-xl shadow mb-4 px-4 py-3 flex items-center gap-3">
+          <MagnifyingGlassIcon className="w-4 h-4 text-slate-400 flex-shrink-0" />
+          <input
+            type="text"
+            placeholder="Search by email or role…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="flex-1 text-sm text-slate-700 placeholder-slate-400 outline-none bg-transparent"
+          />
+          {search && (
+            <button
+              onClick={() => setSearch("")}
+              className="text-xs text-slate-400 hover:text-slate-600 font-semibold transition-colors"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+
+        {/* Table */}
         {data && (
-          <div className="block w-full overflow-x-auto bg-white rounded shadow">
-            <table className="items-center w-full bg-transparent border-collapse">
-              <thead>
+          <div className="bg-white rounded-xl shadow overflow-x-auto">
+            <table className="w-full min-w-[800px]">
+              <thead className="bg-slate-50 border-b border-slate-100">
                 <tr>
-                  <th className="px-6 bg-slate-50 text-slate-500 align-middle border border-solid border-slate-100 py-3 text-xs uppercase border-l-0 border-r-0 whitespace-nowrap font-semibold text-left">
-                    ID
+                  <th className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    User
                   </th>
-                  <th className="px-6 bg-slate-50 text-slate-500 align-middle border border-solid border-slate-100 py-3 text-xs uppercase border-l-0 border-r-0 whitespace-nowrap font-semibold text-left">
-                    Email
-                  </th>
-                  <th className="px-6 bg-slate-50 text-slate-500 align-middle border border-solid border-slate-100 py-3 text-xs uppercase border-l-0 border-r-0 whitespace-nowrap font-semibold text-left">
+                  <th className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     Role
                   </th>
-                  <th className="px-6 bg-slate-50 text-slate-500 align-middle border border-solid border-slate-100 py-3 text-xs uppercase border-l-0 border-r-0 whitespace-nowrap font-semibold text-left">
-                    Created At
+                  <th className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Joined
                   </th>
-                  <th className="px-6 bg-slate-50 text-slate-500 align-middle border border-solid border-slate-100 py-3 text-xs uppercase border-l-0 border-r-0 whitespace-nowrap font-semibold text-left">
+                  <th className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     Actions
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {data.adminAllUsers.map((u) => (
-                  <tr key={u.id} className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50 transition">
-                    <td className="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4 text-slate-500 font-mono">
-                      {u.id.slice(0, 8)}...
+                {filteredUsers.map((u) => (
+                  <tr
+                    key={u.id}
+                    className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60 transition-colors"
+                  >
+                    {/* User cell */}
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${userAvatarColor(u.role)}`}
+                        >
+                          {userInitials(u.email)}
+                        </div>
+                        <div>
+                          <div
+                            className={`text-sm font-semibold leading-tight ${u.role === "HOST" ? "text-brand-600 hover:underline cursor-pointer" : "text-slate-700"}`}
+                            onClick={() => u.role === "HOST" && nav(`/admin/users/${u.firebaseUid}`)}
+                          >
+                            {u.email || "No Email (Provider Auth)"}
+                          </div>
+                          <div className="text-[10px] font-mono text-slate-400 mt-0.5">
+                            {u.id.slice(0, 8)}…
+                          </div>
+                          {/* Phone for HOST users */}
+                          {u.role === "HOST" && (
+                            <div className="mt-1">
+                              {editingPhoneUid === u.firebaseUid ? (
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="tel"
+                                    value={phoneInput}
+                                    onChange={(e) => setPhoneInput(e.target.value)}
+                                    placeholder="+94 77 000 0000"
+                                    className="text-[10px] border border-slate-200 rounded px-2 py-1 w-36 focus:outline-none focus:ring-1 focus:ring-brand-400"
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") handleSavePhone(u.firebaseUid);
+                                      if (e.key === "Escape") { setEditingPhoneUid(null); setPhoneInput(""); }
+                                    }}
+                                    autoFocus
+                                  />
+                                  <button
+                                    onClick={() => handleSavePhone(u.firebaseUid)}
+                                    className="text-[10px] font-bold text-brand-600 hover:text-brand-800"
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    onClick={() => { setEditingPhoneUid(null); setPhoneInput(""); }}
+                                    className="text-[10px] text-slate-400 hover:text-slate-600"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              ) : u.phone ? (
+                                <button
+                                  className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-brand-600 transition-colors group"
+                                  title="Click to edit phone"
+                                  onClick={() => { setEditingPhoneUid(u.firebaseUid); setPhoneInput(u.phone ?? ""); }}
+                                >
+                                  <span>📞</span>
+                                  <span className="font-mono group-hover:underline">{u.phone}</span>
+                                </button>
+                              ) : (
+                                <button
+                                  className="text-[10px] text-slate-400 hover:text-brand-600 border border-dashed border-slate-200 hover:border-brand-300 px-2 py-0.5 rounded transition-colors"
+                                  onClick={() => { setEditingPhoneUid(u.firebaseUid); setPhoneInput(""); }}
+                                >
+                                  + Add emergency contact
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </td>
-                    <td className="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4 text-slate-700 font-bold">
-                      {u.email || "No Email (Provider Auth)"}
-                    </td>
-                    <td className="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4">
+
+                    {/* Role cell */}
+                    <td className="px-5 py-3">
                       {editingId === u.id ? (
                         <select
-                          className="border px-2 py-1 text-slate-600 bg-white rounded text-xs shadow-sm focus:outline-none focus:ring w-full max-w-[120px]"
+                          className="border border-slate-200 px-2 py-1 text-slate-600 bg-white rounded-lg text-xs shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-400 max-w-[130px]"
                           value={selectedRole}
                           onChange={(e) => setSelectedRole(e.target.value)}
                         >
@@ -105,51 +250,135 @@ export function AdminUsers() {
                           <option value="ADMIN">ADMIN</option>
                         </select>
                       ) : (
-                        <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase
-                          ${u.role === "ADMIN" ? "bg-slate-800 text-white" : 
-                            u.role === "HOST" ? "bg-indigo-100 text-indigo-700" : 
-                            "bg-sky-100 text-sky-700"}`}
-                        >
-                          {u.role}
-                        </span>
-                      )}
-                    </td>
-                    <td className="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4 text-slate-500">
-                      {new Date(u.createdAt).toLocaleDateString()}
-                    </td>
-                    <td className="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4">
-                      {editingId === u.id ? (
-                        <div className="flex gap-2">
-                          <Button 
-                            className="!px-3 !py-1 !text-[10px]" 
-                            disabled={updating}
-                            onClick={() => handleRoleChange(u.id)}
+                        <div className="flex flex-col gap-1.5">
+                          <span
+                            className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide w-fit
+                              ${u.role === "ADMIN"
+                                ? "bg-slate-800 text-white"
+                                : u.role === "HOST"
+                                ? "bg-violet-100 text-violet-700"
+                                : "bg-brand-100 text-brand-700"
+                              }`}
                           >
-                            Save
-                          </Button>
-                          <Button 
-                            variant="ghost" 
-                            className="!px-3 !py-1 !text-[10px]"
-                            onClick={() => setEditingId(null)}
-                          >
-                            Cancel
-                          </Button>
+                            {u.role}
+                          </span>
+                          {u.badgeLevel && u.badgeLevel !== "NONE" && (
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border w-fit ${BADGE_STYLE[u.badgeLevel] ?? ""}`}
+                            >
+                              {BADGE_EMOJI[u.badgeLevel]} {u.badgeLevel[0] + u.badgeLevel.slice(1).toLowerCase()} Host
+                            </span>
+                          )}
                         </div>
-                      ) : (
-                        <Button 
-                          variant="ghost" 
-                          className="!px-3 !py-1 !text-[10px] text-sky-600 shadow-none border border-sky-100 hover:bg-sky-50"
-                          onClick={() => {
-                            setEditingId(u.id);
-                            setSelectedRole(u.role);
-                          }}
-                        >
-                          Edit Role
-                        </Button>
                       )}
+                    </td>
+
+                    {/* Joined cell */}
+                    <td className="px-5 py-3 text-xs text-slate-500">
+                      {new Date(u.createdAt).toLocaleDateString("en-US", {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </td>
+
+                    {/* Actions cell */}
+                    <td className="px-5 py-3">
+                      <div className="flex gap-2 items-center flex-wrap">
+                        {editingId === u.id ? (
+                          <>
+                            <Button
+                              className="!px-3 !py-1 !text-[10px]"
+                              disabled={updating}
+                              onClick={() => handleRoleChange(u.id)}
+                            >
+                              Save
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              className="!px-3 !py-1 !text-[10px]"
+                              onClick={() => setEditingId(null)}
+                            >
+                              Cancel
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              className="text-[10px] font-bold text-brand-600 hover:text-brand-800 border border-brand-200 hover:bg-brand-50 px-3 py-1 rounded-lg transition-colors"
+                              onClick={() => {
+                                setEditingId(u.id);
+                                setSelectedRole(u.role);
+                              }}
+                            >
+                              Edit Role
+                            </button>
+                            {u.role === "TRAVELER" && (
+                              <button
+                                className="text-[10px] font-bold text-violet-600 hover:text-violet-800 border border-violet-200 hover:bg-violet-50 px-3 py-1 rounded-lg transition-colors disabled:opacity-40"
+                                disabled={updating}
+                                onClick={async () => {
+                                  await changeRole({ variables: { id: u.id, role: "HOST" } });
+                                  await refetch();
+                                }}
+                              >
+                                Grant Host
+                              </button>
+                            )}
+                            {u.role === "HOST" && (
+                              <button
+                                className="text-[10px] font-bold text-slate-500 hover:text-slate-700 border border-slate-200 hover:bg-slate-50 px-3 py-1 rounded-lg transition-colors disabled:opacity-40"
+                                disabled={updating}
+                                onClick={async () => {
+                                  await changeRole({ variables: { id: u.id, role: "TRAVELER" } });
+                                  await refetch();
+                                }}
+                              >
+                                Revoke Host
+                              </button>
+                            )}
+                            {u.role === "TRAVELER" && (
+                              <button
+                                className="text-[10px] font-bold text-amber-600 hover:text-amber-800 border border-amber-200 hover:bg-amber-50 px-3 py-1 rounded-lg transition-colors disabled:opacity-40"
+                                disabled={updatingSub}
+                                title="Grant Premium AI access (30 requests/month)"
+                                onClick={async () => {
+                                  await updateSubscription({ variables: { targetFirebaseUid: u.firebaseUid, tier: "PREMIUM" } });
+                                  await refetch();
+                                }}
+                              >
+                                Grant Premium
+                              </button>
+                            )}
+                            {u.role === "TRAVELER" && (
+                              <button
+                                className="text-[10px] font-bold text-slate-400 hover:text-slate-600 border border-slate-200 hover:bg-slate-50 px-3 py-1 rounded-lg transition-colors disabled:opacity-40"
+                                disabled={updatingSub}
+                                title="Revert to Free tier (5 requests/month)"
+                                onClick={async () => {
+                                  await updateSubscription({ variables: { targetFirebaseUid: u.firebaseUid, tier: "FREE" } });
+                                  await refetch();
+                                }}
+                              >
+                                Revoke Premium
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
+
+                {filteredUsers.length === 0 && !loading && (
+                  <tr>
+                    <td colSpan={4} className="px-5 py-12 text-center text-slate-400 text-sm font-semibold">
+                      {search
+                        ? `No users matching "${search}"`
+                        : "No users found."}
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

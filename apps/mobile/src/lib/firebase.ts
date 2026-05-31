@@ -11,24 +11,15 @@ const firebaseConfig = {
   appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
 };
 
-let app;
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+
 let auth;
-
 try {
-  if (getApps().length === 0) {
-    app = initializeApp(firebaseConfig);
-  } else {
-    app = getApp();
-  }
-
-  // Initialize Auth with AsyncStorage persistence for React Native
   auth = initializeAuth(app, {
     persistence: getReactNativePersistence(AsyncStorage),
   });
-  console.log("🔥 Firebase Initialized Successfully");
-} catch (error) {
-  console.error("🔥 Firebase Initialization Error:", error);
-  // Fallback if needed, or app will run without full auth
+} catch {
+  auth = getAuth(app);
 }
 
 export { app as firebaseApp, auth };

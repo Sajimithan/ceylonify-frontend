@@ -9,8 +9,11 @@ export const MY_LISTINGS = gql`
       type
       status
       createdAt
+      startDateTime
       rejectionReason
       imageUrl
+      isPremium
+      viewCount
     }
   }
 `;
@@ -30,6 +33,11 @@ export const GET_LISTING = gql`
       imageUrl
       status
       createdAt
+      lat
+      lng
+      isPremium
+      viewCount
+      rejectionReason
     }
   }
 `;

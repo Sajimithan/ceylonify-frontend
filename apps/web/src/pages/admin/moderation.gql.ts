@@ -7,6 +7,10 @@ export const PENDING_LISTINGS = gql`
       title
       description
       type
+      category
+      price
+      startDateTime
+      placeName
       status
       createdAt
       lat
@@ -35,3 +39,13 @@ export const REJECT_LISTING = gql`
   }
 `;
 
+export const AI_REVIEW_LISTING = gql`
+  mutation AiReviewListing($title: String!, $description: String!) {
+    aiReviewListing(title: $title, description: $description) {
+      safe
+      confidence
+      flags
+      summary
+    }
+  }
+`;
