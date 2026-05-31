@@ -36,6 +36,7 @@ export const SEARCH_LISTINGS = gql`
         category
         price
         placeName
+        startDateTime
         imageUrl
         isPremium
         viewCount

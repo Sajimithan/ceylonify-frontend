@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   StyleSheet, ActivityIndicator, Image,
 } from 'react-native';
-import { Search as SearchIcon, X, History, TrendingUp, MapPin } from 'lucide-react-native';
+import { Search as SearchIcon, X, History, TrendingUp, MapPin, CalendarDays } from 'lucide-react-native';
 import { gqlFetch } from '../../src/hooks/useGraphQL';
 import { useRouter } from 'expo-router';
 
@@ -222,9 +222,17 @@ export default function SearchScreen() {
                     </View>
                   </View>
                   {listing.placeName && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
                       <MapPin size={12} color="#0EA5A4" />
                       <Text style={styles.resultLocation} numberOfLines={1}> {listing.placeName}</Text>
+                    </View>
+                  )}
+                  {listing.startDateTime && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                      <CalendarDays size={12} color="#94A3B8" />
+                      <Text style={[styles.resultLocation, { color: '#94A3B8' }]} numberOfLines={1}>
+                        {' '}{new Date(listing.startDateTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </Text>
                     </View>
                   )}
                   <Text style={styles.resultDescription} numberOfLines={2}>{listing.description}</Text>

@@ -15,21 +15,90 @@ type WeatherData = {
   name: string;
 };
 
-function WeatherWidget({ lat, lng }: { lat: number; lng: number }) {
+type ForecastEntry = {
+  dt: number;
+  main: { temp: number; feels_like: number; humidity: number };
+  weather: { description: string; icon: string }[];
+};
+
+function WeatherWidget({ lat, lng, eventDate }: { lat: number; lng: number; eventDate?: string }) {
   const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [forecastLabel, setForecastLabel] = useState<string | null>(null);
+  const [outOfRange, setOutOfRange] = useState<string | null>(null);
   const apiKey = import.meta.env.VITE_WEATHER_API_KEY as string | undefined;
 
   useEffect(() => {
     if (!apiKey || lat === 0 || lng === 0) return;
-    fetch(
-      `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&appid=${apiKey}&units=metric`
-    )
+    setWeather(null);
+    setForecastLabel(null);
+    setOutOfRange(null);
+
+    const fetchCurrent = () => {
+      fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&appid=${apiKey}&units=metric`)
+        .then((r) => r.json())
+        .then((d) => setWeather(d as WeatherData))
+        .catch(() => null);
+    };
+
+    if (!eventDate) {
+      fetchCurrent();
+      return;
+    }
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const eventDt = new Date(eventDate);
+    const eventDayStart = new Date(eventDt.getFullYear(), eventDt.getMonth(), eventDt.getDate());
+    const diffDays = Math.round((eventDayStart.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) {
+      setOutOfRange('Weather data unavailable for past events.');
+      return;
+    }
+    if (diffDays > 5) {
+      setOutOfRange('beyond5');
+      return;
+    }
+    if (diffDays === 0) {
+      fetchCurrent();
+      return;
+    }
+
+    // 1–5 days ahead: use 5-day forecast, find closest 3-hour slot
+    fetch(`https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lng}&appid=${apiKey}&units=metric`)
       .then((r) => r.json())
-      .then((d) => setWeather(d as WeatherData))
+      .then((d: { list: ForecastEntry[] }) => {
+        const list = d.list;
+        if (!list?.length) return;
+        const target = eventDt.getTime();
+        const closest = list.reduce((best, entry) =>
+          Math.abs(entry.dt * 1000 - target) < Math.abs(best.dt * 1000 - target) ? entry : best
+        );
+        setWeather({ main: closest.main, weather: closest.weather, name: '' });
+        setForecastLabel(
+          `Forecast for ${eventDt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`
+        );
+      })
       .catch(() => null);
-  }, [lat, lng, apiKey]);
+  }, [lat, lng, apiKey, eventDate]);
 
   if (!apiKey || lat === 0 || lng === 0) return null;
+
+  if (outOfRange) return (
+    <div className="space-y-1">
+      <div className="text-xs text-slate-400 italic">
+        {outOfRange === 'beyond5'
+          ? 'Forecast available up to 5 days before the event.'
+          : outOfRange}
+      </div>
+      {outOfRange === 'beyond5' && (
+        <div className="text-xs text-brand-500 font-medium">
+          Upgrade to Premium to unlock extended weather forecasts and plan ahead with confidence.
+        </div>
+      )}
+    </div>
+  );
+
   if (!weather) return (
     <div className="text-xs text-slate-400 font-semibold">Loading weather…</div>
   );
@@ -54,6 +123,9 @@ function WeatherWidget({ lat, lng }: { lat: number; lng: number }) {
         <div className="text-xs text-slate-400">
           Humidity {weather.main.humidity}%
         </div>
+        {forecastLabel && (
+          <div className="text-xs text-brand-500 font-medium mt-0.5">{forecastLabel}</div>
+        )}
       </div>
     </div>
   );
@@ -298,9 +370,9 @@ export function ListingDetail() {
             {hasCoords && (
               <div className="bg-white rounded-xl shadow p-5">
                 <h2 className="text-slate-400 text-xs font-bold uppercase mb-3">
-                  Current Weather
+                  Weather
                 </h2>
-                <WeatherWidget lat={listing.lat} lng={listing.lng} />
+                <WeatherWidget lat={listing.lat} lng={listing.lng} eventDate={listing.startDateTime ?? undefined} />
                 {(!import.meta.env.VITE_WEATHER_API_KEY) && (
                   <div className="text-xs text-slate-400 italic">
                     Add VITE_WEATHER_API_KEY to .env to enable weather.

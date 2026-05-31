@@ -436,11 +436,18 @@ export function Browse() {
                       ) : (
                         <span className="text-xs font-semibold text-emerald-500">Free</span>
                       )}
-                      {listing.placeName && (
-                        <span className="text-[10px] text-slate-400 font-semibold truncate max-w-[100px]">
-                          📍 {listing.placeName}
-                        </span>
-                      )}
+                      <div className="flex flex-col items-end gap-0.5">
+                        {listing.placeName && (
+                          <span className="text-[10px] text-slate-400 font-semibold truncate max-w-[110px]">
+                            📍 {listing.placeName}
+                          </span>
+                        )}
+                        {listing.startDateTime && (
+                          <span className="text-[10px] text-slate-400 font-semibold">
+                            🗓 {new Date(listing.startDateTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

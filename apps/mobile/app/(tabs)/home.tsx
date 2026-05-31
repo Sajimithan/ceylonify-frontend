@@ -3,7 +3,7 @@ import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
   ActivityIndicator, StyleSheet, Image, RefreshControl,
 } from 'react-native';
-import { Search, MapPin, Bell } from 'lucide-react-native';
+import { Search, MapPin, Bell, CalendarDays } from 'lucide-react-native';
 import { useGraphQL } from '../../src/hooks/useGraphQL';
 import { useRouter } from 'expo-router';
 import { auth } from '../../src/lib/firebase';
@@ -21,7 +21,7 @@ const SEARCH_LISTINGS = `
   query SearchListings($category: String, $q: String, $limit: Int) {
     searchListings(category: $category, q: $q, limit: $limit) {
       listings {
-        id title description type category price placeName imageUrl isPremium viewCount createdAt
+        id title description type category price placeName startDateTime imageUrl isPremium viewCount createdAt
       }
       total
     }
@@ -222,6 +222,14 @@ export default function HomeScreen() {
                     <Text style={styles.locationText} numberOfLines={1}>{listing.placeName}</Text>
                   </View>
                 )}
+                {listing.startDateTime && (
+                  <View style={styles.locationRow}>
+                    <CalendarDays size={13} color="#94A3B8" />
+                    <Text style={styles.eventDateText} numberOfLines={1}>
+                      {new Date(listing.startDateTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </Text>
+                  </View>
+                )}
 
                 <Text style={styles.listingDescription} numberOfLines={2}>{listing.description}</Text>
 
@@ -320,6 +328,7 @@ const styles = StyleSheet.create({
   listingPriceFree: { fontSize: 13, fontWeight: '600', color: '#10B981' },
   locationRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   locationText: { fontSize: 12, color: '#667085', marginLeft: 4, flex: 1 },
+  eventDateText: { fontSize: 12, color: '#94A3B8', marginLeft: 4, flex: 1 },
   listingDescription: { fontSize: 13, color: '#6B7280', lineHeight: 19, marginBottom: 12 },
   listingFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   categoryTag: { backgroundColor: '#F0FDF4', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: '#BBF7D0' },
