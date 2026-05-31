@@ -81,7 +81,14 @@ export const ADMIN_ALL_LISTINGS = gql`
       title
       description
       type
+      category
+      price
+      placeName
+      startDateTime
+      lat
+      lng
       status
+      rejectionReason
       createdAt
       createdBy
       imageUrl
