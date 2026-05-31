@@ -7,7 +7,7 @@ import { Button } from "../ui/Button";
 
 export function Login() {
   const nav = useNavigate();
-  const [email, setEmail] = useState("host@test.com");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -106,10 +106,6 @@ export function Login() {
           </Link>
         </p>
 
-        <div className="mt-4 space-y-1 text-xs text-neutral-400">
-          <p>Host: any registered Firebase user</p>
-          <p>Admin: <span className="font-mono">admin@test.com</span></p>
-        </div>
       </div>
 
       {/* Footer */}
