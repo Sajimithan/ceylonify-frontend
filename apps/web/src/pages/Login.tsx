@@ -78,6 +78,7 @@ export function Login() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
+              placeholder="••••••••"
             />
             <div className="text-right mt-1">
               <Link
