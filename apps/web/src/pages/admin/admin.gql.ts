@@ -17,6 +17,12 @@ export const ADMIN_STATS = gql`
   }
 `;
 
+export const ADMIN_CREATE_ADMIN_ACCOUNT = gql`
+  mutation AdminCreateAdminAccount($email: String!, $password: String!) {
+    adminCreateAdminAccount(email: $email, password: $password)
+  }
+`;
+
 export const ADMIN_ALL_USERS = gql`
   query AdminAllUsers {
     adminAllUsers {

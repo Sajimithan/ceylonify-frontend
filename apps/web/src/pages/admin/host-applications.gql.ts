@@ -32,6 +32,33 @@ export const ADMIN_PENDING_HOST_APPLICATIONS = gql`
   }
 `;
 
+export const ADMIN_GET_HOST_APPLICATION = gql`
+  query AdminGetHostApplication($firebaseUid: String!) {
+    adminGetHostApplication(firebaseUid: $firebaseUid) {
+      id
+      firebaseUid
+      email
+      hostTypes
+      businessName
+      businessAddress
+      businessLat
+      businessLng
+      phoneNumber
+      licenseNumber
+      idType
+      idDocumentUrl
+      businessDocUrl
+      healthCertUrl
+      licenseDocUrl
+      bankDocUrl
+      status
+      submittedAt
+      reviewedAt
+      reviewNote
+    }
+  }
+`;
+
 export const ADMIN_REVIEW_HOST_APPLICATION = gql`
   mutation AdminReviewHostApplication(
     $firebaseUid: String!
