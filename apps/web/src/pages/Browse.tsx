@@ -61,6 +61,10 @@ export function Browse() {
   const [nearMeLoading, setNearMeLoading] = useState(false);
   const [nearMeError, setNearMeError] = useState<string | null>(null);
   const [browseMode, setBrowseMode] = useState<"experiences" | "hosts">("experiences");
+  const [sortBy, setSortBy] = useState("");
+  const [priceMin, setPriceMin] = useState("");
+  const [priceMax, setPriceMax] = useState("");
+  const [nearMeRadius, setNearMeRadius] = useState(50);
 
   const { isLoaded: mapsLoaded } = useJsApiLoader({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string,
@@ -101,6 +105,7 @@ export function Browse() {
   const runSearch = useCallback(
     (resetOffset = false) => {
       const newOffset = resetOffset ? 0 : offset;
+      const [sb, so] = sortBy ? (sortBy.includes('-') ? sortBy.split('-') : [sortBy, 'DESC']) : ['', ''];
       search({
         variables: {
           q: debouncedQ || undefined,
@@ -111,10 +116,14 @@ export function Browse() {
           startAfter: startAfter || undefined,
           startBefore: startBefore || undefined,
           hidePastEvents: true,
+          priceMin: priceMin ? parseFloat(priceMin) : undefined,
+          priceMax: priceMax ? parseFloat(priceMax) : undefined,
+          sortBy: sb || undefined,
+          sortOrder: so || undefined,
         },
       });
     },
-    [search, debouncedQ, category, type, offset, startAfter, startBefore]
+    [search, debouncedQ, category, type, offset, startAfter, startBefore, sortBy, priceMin, priceMax]
   );
 
   // If map view is disabled by admin while user is in map mode, switch back to grid
@@ -133,7 +142,7 @@ export function Browse() {
     setOffset(0);
     setAllListings([]);
     runSearch(true);
-  }, [debouncedQ, category, type, startAfter, startBefore]); // eslint-disable-line
+  }, [debouncedQ, category, type, startAfter, startBefore, sortBy, priceMin, priceMax]); // eslint-disable-line
 
   // Append results when offset changes (load more)
   useEffect(() => {
@@ -198,7 +207,7 @@ export function Browse() {
         const { latitude, longitude } = pos.coords;
         try {
           const { data: nearbyData } = await fetchNearby({
-            variables: { lat: latitude, lng: longitude, radiusKm: 50, limit: 40 },
+            variables: { lat: latitude, lng: longitude, radiusKm: nearMeRadius, limit: 40 },
           });
           if (nearbyData?.nearbyListings) {
             setAllListings(nearbyData.nearbyListings);
@@ -360,14 +369,59 @@ export function Browse() {
               Clear dates
             </button>
           )}
+          {/* Price range */}
+          <div className="flex items-center gap-1">
+            <input
+              type="number"
+              placeholder="Min LKR"
+              value={priceMin}
+              onChange={(e) => setPriceMin(e.target.value)}
+              className="border-0 px-2 py-2 text-slate-600 bg-white rounded shadow text-xs focus:outline-none focus:ring w-24"
+            />
+            <span className="text-slate-400 text-xs">–</span>
+            <input
+              type="number"
+              placeholder="Max LKR"
+              value={priceMax}
+              onChange={(e) => setPriceMax(e.target.value)}
+              className="border-0 px-2 py-2 text-slate-600 bg-white rounded shadow text-xs focus:outline-none focus:ring w-24"
+            />
+          </div>
+
+          {/* Sort */}
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            className="border-0 px-3 py-2 text-slate-600 bg-white rounded shadow text-sm focus:outline-none focus:ring"
+          >
+            <option value="">Newest</option>
+            <option value="price-ASC">Price: Low → High</option>
+            <option value="price-DESC">Price: High → Low</option>
+            <option value="views-DESC">Most Viewed</option>
+            <option value="date-ASC">Date: Soonest</option>
+          </select>
+
           {nearMeEnabled && (
-            <button
-              onClick={handleNearMe}
-              disabled={nearMeLoading}
-              className="px-3 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-bold rounded shadow text-xs transition-colors whitespace-nowrap"
-            >
-              {nearMeLoading ? "Locating…" : "📍 Near Me"}
-            </button>
+            <div className="flex items-center gap-1">
+              <select
+                value={nearMeRadius}
+                onChange={(e) => setNearMeRadius(Number(e.target.value))}
+                className="border-0 px-2 py-2 text-slate-600 bg-white rounded shadow text-xs focus:outline-none focus:ring"
+              >
+                <option value={5}>5 km</option>
+                <option value={10}>10 km</option>
+                <option value={25}>25 km</option>
+                <option value={50}>50 km</option>
+                <option value={100}>100 km</option>
+              </select>
+              <button
+                onClick={handleNearMe}
+                disabled={nearMeLoading}
+                className="px-3 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-bold rounded shadow text-xs transition-colors whitespace-nowrap"
+              >
+                {nearMeLoading ? "Locating…" : "📍 Near Me"}
+              </button>
+            </div>
           )}
           {mapViewEnabled && (
             <div className="ml-auto flex items-center gap-1 bg-white rounded shadow px-1 py-1">

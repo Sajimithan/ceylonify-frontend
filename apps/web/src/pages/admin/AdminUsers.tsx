@@ -142,8 +142,8 @@ export function AdminUsers() {
 
         {/* Table */}
         {data && (
-          <div className="bg-white rounded-xl shadow overflow-hidden">
-            <table className="w-full">
+          <div className="bg-white rounded-xl shadow overflow-x-auto">
+            <table className="w-full min-w-[800px]">
               <thead className="bg-slate-50 border-b border-slate-100">
                 <tr>
                   <th className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">

@@ -24,6 +24,7 @@ import { AiPlanner } from "../pages/AiPlanner";
 import { Experienced } from "../pages/Experienced";
 import { HostPublicProfile } from "../pages/HostPublicProfile";
 import { TravelerAccount } from "../pages/TravelerAccount";
+import { Itinerary } from "../pages/Itinerary";
 
 // Admin pages
 import { AdminPendingListings } from "../pages/admin/AdminPendingListings";
@@ -68,6 +69,10 @@ export const router = createBrowserRouter([
   {
     path: "/experienced",
     element: <RequireHost><Experienced /></RequireHost>,
+  },
+  {
+    path: "/itinerary",
+    element: <RequireHost><Itinerary /></RequireHost>,
   },
   {
     path: "/hosts/:firebaseUid",

@@ -6,10 +6,11 @@ import { useQuery, useMutation } from "@apollo/client/react";
 import { DashboardLayout } from "../layouts/DashboardLayout";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
-import { GET_LISTING_DETAIL, ME_QUERY, RELATED_LISTINGS_QUERY } from "./browse.gql";
+import { GET_LISTING_DETAIL, ME_QUERY, RELATED_LISTINGS_QUERY, HOST_BADGE_QUERY } from "./browse.gql";
 import { MY_SAVED_LISTINGS, SAVE_LISTING, UNSAVE_LISTING } from "./host/saved.gql";
 import { IS_GOING, MARK_GOING, UNMARK_GOING } from "./going.gql";
 import { LISTING_EXPERIENCES } from "./experiences.gql";
+import { REPORT_LISTING } from "./report.gql";
 
 type WeatherData = {
   main: { temp: number; feels_like: number; humidity: number };
@@ -188,6 +189,13 @@ export function ListingDetail() {
   const [markGoing] = useMutation(MARK_GOING);
   const [unmarkGoing] = useMutation(UNMARK_GOING);
   const { data: experiencesData } = useQuery(LISTING_EXPERIENCES, { variables: { listingId: id }, skip: !id });
+  const hostUid: string | undefined = listingData?.listing?.createdBy;
+  const { data: hostBadgeData } = useQuery(HOST_BADGE_QUERY, { variables: { firebaseUid: hostUid ?? "" }, skip: !hostUid });
+  const [reportListing] = useMutation(REPORT_LISTING);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportReason, setReportReason] = useState("INAPPROPRIATE");
+  const [reportComment, setReportComment] = useState("");
+  const [reportSubmitted, setReportSubmitted] = useState(false);
 
   const listing = listingData?.listing;
   const isPremiumUser: boolean =
@@ -200,6 +208,13 @@ export function ListingDetail() {
   );
   const isSaved = id ? savedIds.has(id) : false;
   const isGoing: boolean = isGoingData?.isGoing ?? false;
+
+  async function handleSubmitReport() {
+    if (!id) return;
+    await reportListing({ variables: { listingId: id, reason: reportReason, comment: reportComment || undefined } });
+    setReportSubmitted(true);
+    setTimeout(() => { setShowReportModal(false); setReportSubmitted(false); setReportComment(""); }, 1500);
+  }
 
   async function handleGoing() {
     if (!id) return;
@@ -251,6 +266,56 @@ export function ListingDetail() {
         </Button>
       }
     >
+      {/* Report Modal */}
+      {showReportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-7 max-w-sm w-full">
+            {reportSubmitted ? (
+              <div className="text-center py-4">
+                <div className="text-3xl mb-2">✅</div>
+                <div className="font-bold text-slate-700">Report submitted. Thank you!</div>
+              </div>
+            ) : (
+              <>
+                <h3 className="font-bold text-slate-700 text-lg mb-4">Report Listing</h3>
+                <div className="mb-3">
+                  <label className="block text-xs font-bold text-slate-500 mb-1">Reason *</label>
+                  <select
+                    value={reportReason}
+                    onChange={(e) => setReportReason(e.target.value)}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300"
+                  >
+                    <option value="INAPPROPRIATE">Inappropriate content</option>
+                    <option value="MISLEADING">Misleading information</option>
+                    <option value="SPAM">Spam</option>
+                    <option value="ILLEGAL">Illegal activity</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </div>
+                <div className="mb-5">
+                  <label className="block text-xs font-bold text-slate-500 mb-1">Additional details (optional)</label>
+                  <textarea
+                    value={reportComment}
+                    onChange={(e) => setReportComment(e.target.value)}
+                    rows={3}
+                    placeholder="Describe the issue…"
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-red-300"
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <button onClick={() => setShowReportModal(false)} className="flex-1 py-2 border border-slate-200 rounded-lg text-slate-500 font-bold text-sm hover:bg-slate-50 transition-colors">
+                    Cancel
+                  </button>
+                  <button onClick={handleSubmitReport} className="flex-1 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-bold text-sm transition-colors">
+                    Submit Report
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="mx-auto w-full max-w-5xl">
         {isLocked && (
           <div className="mb-6 rounded-xl bg-amber-50 border border-amber-200 px-5 py-4 flex items-start gap-3">
@@ -392,8 +457,42 @@ export function ListingDetail() {
                     View on Google Maps
                   </a>
                 )}
+                <button
+                  onClick={() => setShowReportModal(true)}
+                  className="w-full py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors border border-transparent hover:border-red-100"
+                >
+                  🚩 Report this listing
+                </button>
               </div>
             </div>
+
+            {/* Host info card */}
+            {hostUid && (
+              <div className="bg-white rounded-xl shadow p-5">
+                <h2 className="text-slate-400 text-xs font-bold uppercase mb-3">Host</h2>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-brand-100 flex items-center justify-center text-brand-600 font-bold text-sm flex-shrink-0">
+                    {hostUid.slice(0, 2).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-bold text-slate-700 truncate">
+                      {hostBadgeData?.hostBadge?.badgeLevel && hostBadgeData.hostBadge.badgeLevel !== 'NONE'
+                        ? `${hostBadgeData.hostBadge.badgeLevel === 'DIAMOND' ? '💎' : hostBadgeData.hostBadge.badgeLevel === 'GOLD' ? '🥇' : hostBadgeData.hostBadge.badgeLevel === 'SILVER' ? '🥈' : '🥉'} ${hostBadgeData.hostBadge.badgeLevel} Host`
+                        : 'Ceylonify Host'}
+                    </div>
+                    {hostBadgeData?.hostBadge?.approvedCount > 0 && (
+                      <div className="text-[11px] text-slate-400">{hostBadgeData.hostBadge.approvedCount} approved experiences</div>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={() => nav(`/hosts/${hostUid}`)}
+                  className="mt-3 w-full py-1.5 rounded-lg text-xs font-bold text-brand-600 border border-brand-200 hover:bg-brand-50 transition-colors"
+                >
+                  View Host Profile →
+                </button>
+              </div>
+            )}
 
             {/* Weather */}
             {hasCoords && (

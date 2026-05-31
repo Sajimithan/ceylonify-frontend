@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from '@apollo/client/react';
 import { Link } from 'react-router-dom';
-import { MY_LISTINGS, DELETE_LISTING } from './listings.gql';
+import { MY_LISTINGS, DELETE_LISTING, UPDATE_LISTING } from './listings.gql';
 import { Card } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
 import { Button } from '../../ui/Button';
@@ -198,7 +198,9 @@ export function MyListings() {
   const [deleteListing] = useMutation(DELETE_LISTING, {
     onCompleted: () => refetch()
   });
-  
+  const [updateListing] = useMutation(UPDATE_LISTING, {
+    onCompleted: () => refetch()
+  });
   const [sharingListing, setSharingListing] = useState<Listing | null>(null);
 
   useEffect(() => {
@@ -209,6 +211,11 @@ export function MyListings() {
     if (confirm("Are you sure you want to delete this listing?")) {
       await deleteListing({ variables: { id } });
     }
+  }
+
+  async function handleResubmit(l: Listing) {
+    if (!confirm("Resubmit this listing for review?")) return;
+    await updateListing({ variables: { id: l.id, input: { title: l.title } } });
   }
 
   const allListings = data?.myListings ?? [];
@@ -329,6 +336,15 @@ export function MyListings() {
                     <Link to={`/listing/${l.id}`}>
                       <Button variant="ghost" className="!px-3 !py-1 !text-[10px] text-emerald-600">View</Button>
                     </Link>
+                  )}
+                  {l.status === 'REJECTED' && (
+                    <Button
+                      variant="ghost"
+                      className="!px-3 !py-1 !text-[10px] text-amber-600 border border-amber-200 hover:bg-amber-50"
+                      onClick={() => handleResubmit(l)}
+                    >
+                      Resubmit
+                    </Button>
                   )}
                   <Link to={`/host/edit/${l.id}`}>
                     <Button variant="ghost" className="!px-3 !py-1 !text-[10px] text-sky-600">Edit</Button>

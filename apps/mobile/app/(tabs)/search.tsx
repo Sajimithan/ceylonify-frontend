@@ -17,7 +17,7 @@ function fixImageUrl(url?: string | null): string | null {
 const SEARCH_QUERY = `
   query SearchListings($q: String, $limit: Int, $category: String, $startAfter: String, $startBefore: String) {
     searchListings(q: $q, limit: $limit, category: $category, startAfter: $startAfter, startBefore: $startBefore) {
-      listings { id title description type category price placeName imageUrl createdAt startDateTime }
+      listings { id title description type category price placeName imageUrl createdAt startDateTime goingCount }
       total
     }
   }
@@ -235,6 +235,11 @@ export default function SearchScreen() {
                       </Text>
                     </View>
                   )}
+                  {listing.type === 'EVENT' && (listing.goingCount ?? 0) > 0 && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                      <Text style={styles.goingText}>👥 {listing.goingCount} going</Text>
+                    </View>
+                  )}
                   <Text style={styles.resultDescription} numberOfLines={2}>{listing.description}</Text>
                   <View style={styles.resultFooter}>
                     {listing.category && (
@@ -302,6 +307,7 @@ const styles = StyleSheet.create({
   typePill: { backgroundColor: '#E0F6F6', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
   typePillText: { fontSize: 10, color: '#0EA5A4', fontWeight: 'bold', textTransform: 'uppercase' },
   resultLocation: { fontSize: 12, color: '#667085', flex: 1 },
+  goingText: { fontSize: 11, color: '#059669', fontWeight: '700', backgroundColor: '#ECFDF5', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999 },
   resultDescription: { fontSize: 13, color: '#6B7280', lineHeight: 19, marginBottom: 8 },
   resultFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   resultCategory: { fontSize: 12, color: '#0EA5A4', fontWeight: '600', textTransform: 'capitalize' },

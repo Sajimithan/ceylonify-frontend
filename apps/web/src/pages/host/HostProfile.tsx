@@ -1,15 +1,17 @@
 import { useRef, useState } from "react";
 import { gql } from "@apollo/client";
-import { useQuery } from "@apollo/client/react";
+import { useQuery, useMutation } from "@apollo/client/react";
 import {
   updateProfile,
   updatePassword,
   EmailAuthProvider,
   reauthenticateWithCredential,
+  signOut,
 } from "firebase/auth";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { auth, storage } from "../../auth/firebase";
 import { useAuth } from "../../auth/useAuth";
+import { DELETE_MY_ACCOUNT } from "../premium.gql";
 import { DashboardLayout } from "../../layouts/DashboardLayout";
 import { Input } from "../../ui/Input";
 import { Button } from "../../ui/Button";
@@ -72,6 +74,15 @@ export function HostProfile() {
     variables: { firebaseUid: user?.uid ?? "" },
     skip: !user?.uid,
   });
+  const [deleteMyAccount] = useMutation(DELETE_MY_ACCOUNT);
+
+  async function handleDeleteAccount() {
+    if (!confirm("Are you sure you want to permanently delete your account and all your listings?")) return;
+    if (!confirm("This action cannot be undone. Confirm?")) return;
+    await deleteMyAccount();
+    await signOut(auth);
+    window.location.href = "/login";
+  }
 
   // ── Profile photo ─────────────────────────────────────────────────────────
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -373,6 +384,20 @@ export function HostProfile() {
               {pwLoading ? "Changing…" : "Change Password"}
             </Button>
           </form>
+        </div>
+
+        {/* Danger Zone */}
+        <div className="bg-white rounded-2xl shadow p-7 border border-red-100">
+          <div className="text-sm font-bold text-red-600 mb-1">Danger Zone</div>
+          <div className="text-xs text-slate-400 mb-4">
+            Permanently delete your account and all your listings. This action cannot be undone.
+          </div>
+          <button
+            onClick={handleDeleteAccount}
+            className="px-5 py-2 rounded-lg border border-red-300 text-red-600 font-bold text-sm hover:bg-red-50 transition-colors"
+          >
+            Delete Account
+          </button>
         </div>
       </div>
     </DashboardLayout>

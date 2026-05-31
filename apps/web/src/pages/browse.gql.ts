@@ -19,6 +19,10 @@ export const SEARCH_LISTINGS = gql`
     $startAfter: String
     $startBefore: String
     $hidePastEvents: Boolean
+    $priceMin: Float
+    $priceMax: Float
+    $sortBy: String
+    $sortOrder: String
   ) {
     searchListings(
       q: $q
@@ -29,6 +33,10 @@ export const SEARCH_LISTINGS = gql`
       startAfter: $startAfter
       startBefore: $startBefore
       hidePastEvents: $hidePastEvents
+      priceMin: $priceMin
+      priceMax: $priceMax
+      sortBy: $sortBy
+      sortOrder: $sortOrder
     ) {
       listings {
         id
@@ -104,6 +112,16 @@ export const GET_LISTING_DETAIL = gql`
       lng
       status
       createdAt
+      createdBy
+    }
+  }
+`;
+
+export const HOST_BADGE_QUERY = gql`
+  query HostBadge($firebaseUid: String!) {
+    hostBadge(firebaseUid: $firebaseUid) {
+      approvedCount
+      badgeLevel
     }
   }
 `;

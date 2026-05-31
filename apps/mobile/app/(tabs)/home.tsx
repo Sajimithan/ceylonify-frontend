@@ -21,7 +21,7 @@ const SEARCH_LISTINGS = `
   query SearchListings($category: String, $q: String, $limit: Int) {
     searchListings(category: $category, q: $q, limit: $limit) {
       listings {
-        id title description type category price placeName startDateTime imageUrl isPremium viewCount createdAt
+        id title description type category price placeName startDateTime imageUrl isPremium viewCount goingCount createdAt
       }
       total
     }
@@ -230,6 +230,11 @@ export default function HomeScreen() {
                     </Text>
                   </View>
                 )}
+                {listing.type === 'EVENT' && (listing.goingCount ?? 0) > 0 && (
+                  <View style={styles.goingRow}>
+                    <Text style={styles.goingText}>👥 {listing.goingCount} going</Text>
+                  </View>
+                )}
 
                 <Text style={styles.listingDescription} numberOfLines={2}>{listing.description}</Text>
 
@@ -329,6 +334,8 @@ const styles = StyleSheet.create({
   locationRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   locationText: { fontSize: 12, color: '#667085', marginLeft: 4, flex: 1 },
   eventDateText: { fontSize: 12, color: '#94A3B8', marginLeft: 4, flex: 1 },
+  goingRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  goingText: { fontSize: 11, color: '#059669', fontWeight: '700', backgroundColor: '#ECFDF5', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999 },
   listingDescription: { fontSize: 13, color: '#6B7280', lineHeight: 19, marginBottom: 12 },
   listingFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   categoryTag: { backgroundColor: '#F0FDF4', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: '#BBF7D0' },

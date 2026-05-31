@@ -83,7 +83,7 @@ export function AdminUserDetail() {
             </div>
 
             {/* KPI row */}
-            <div className="grid grid-cols-3 gap-4 mb-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
               {[
                 { label: "Total Listings", value: host.upcomingEvents.length + host.pastEvents.length },
                 { label: "Approved", value: host.approvedCount },

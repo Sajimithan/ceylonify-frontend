@@ -36,3 +36,9 @@ export const SELF_UPGRADE_PREMIUM = gql`
     }
   }
 `;
+
+export const DELETE_MY_ACCOUNT = gql`
+  mutation DeleteMyAccount {
+    deleteMyAccount
+  }
+`;

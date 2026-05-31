@@ -26,6 +26,7 @@ import {
   SparklesIcon,
   StarIcon,
   CreditCardIcon,
+  CalendarDaysIcon,
 } from "@heroicons/react/24/outline";
 
 const NAV_ICONS: Record<string, React.ElementType> = {
@@ -33,6 +34,7 @@ const NAV_ICONS: Record<string, React.ElementType> = {
   "/saved":                    BookmarkIcon,
   "/ai-planner":               SparklesIcon,
   "/experienced":              StarIcon,
+  "/itinerary":                CalendarDaysIcon,
   "/account":                  CreditCardIcon,
   "/dashboard":                HomeIcon,
   "/host/create":              PlusCircleIcon,
@@ -171,6 +173,7 @@ export function DashboardLayout({
             <ul className="space-y-0.5">
               <NavLink to="/browse" onNav={closeSidebar}>Browse Experiences</NavLink>
               <NavLink to="/saved" onNav={closeSidebar}>Saved Listings</NavLink>
+              <NavLink to="/itinerary" onNav={closeSidebar}>My Itinerary</NavLink>
               <NavLink to="/experienced" onNav={closeSidebar}>My Experiences</NavLink>
               {isEnabledFor("AI_TRIP_PLANNER", "HOST") && (
                 <NavLink to="/ai-planner" onNav={closeSidebar}>AI Travel Planner</NavLink>

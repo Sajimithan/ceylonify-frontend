@@ -1,12 +1,23 @@
 import { useState } from "react";
 import { DashboardLayout } from "../layouts/DashboardLayout";
-import { useQuery } from "@apollo/client/react";
-import { ME_VERIFICATION_STATUS } from "./premium.gql";
+import { useQuery, useMutation } from "@apollo/client/react";
+import { ME_VERIFICATION_STATUS, DELETE_MY_ACCOUNT } from "./premium.gql";
 import { PremiumUpgrade } from "./PremiumUpgrade";
+import { signOut } from "firebase/auth";
+import { auth } from "../auth/firebase";
 
 export function TravelerAccount() {
   const { data, refetch } = useQuery(ME_VERIFICATION_STATUS);
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [deleteMyAccount] = useMutation(DELETE_MY_ACCOUNT);
+
+  async function handleDeleteAccount() {
+    if (!confirm("Are you sure you want to permanently delete your account? This cannot be undone.")) return;
+    if (!confirm("All your data (saved listings, itinerary, experiences) will be deleted. Confirm?")) return;
+    await deleteMyAccount();
+    await signOut(auth);
+    window.location.href = "/login";
+  }
 
   const me = data?.me;
   const isPremium = me?.isPremium;
@@ -64,7 +75,7 @@ export function TravelerAccount() {
         </div>
 
         {/* Verification status */}
-        <div className="bg-white rounded-2xl shadow-lg p-7">
+        <div className="bg-white rounded-2xl shadow-lg p-7 mb-6">
           <div className="text-lg font-bold text-slate-700 mb-4">Verification Status</div>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -80,6 +91,18 @@ export function TravelerAccount() {
               </span>
             </div>
           </div>
+        </div>
+
+        {/* Danger zone */}
+        <div className="bg-white rounded-2xl shadow-lg p-7 border border-red-100">
+          <div className="text-sm font-bold text-red-600 mb-1">Danger Zone</div>
+          <div className="text-xs text-slate-400 mb-4">Permanently delete your account and all associated data. This action cannot be undone.</div>
+          <button
+            onClick={handleDeleteAccount}
+            className="px-5 py-2 rounded-lg border border-red-300 text-red-600 font-bold text-sm hover:bg-red-50 transition-colors"
+          >
+            Delete Account
+          </button>
         </div>
       </div>
     </DashboardLayout>
