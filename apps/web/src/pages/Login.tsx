@@ -69,6 +69,7 @@ export function Login() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             autoComplete="email"
+            placeholder="example@email.com"
           />
           <div>
             <Input
