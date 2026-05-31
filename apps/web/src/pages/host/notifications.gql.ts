@@ -13,6 +13,7 @@ export const MY_NOTIFICATIONS = gql`
       title
       body
       type
+      resourceId
       read
       createdAt
     }

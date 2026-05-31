@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@apollo/client/react";
+import { useNavigate } from "react-router-dom";
 import { BellIcon } from "@heroicons/react/24/outline";
 import {
   MY_NOTIFICATIONS,
@@ -12,9 +13,40 @@ type AppNotification = {
   title: string;
   body: string;
   type: string;
+  resourceId?: string;
   read: boolean;
   createdAt: string;
 };
+
+// Maps notification type → destination route
+function resolveRoute(type: string, resourceId?: string): string | null {
+  switch (type) {
+    // Host notifications
+    case "LISTING_APPROVED":
+      return resourceId ? `/listing/${resourceId}` : "/dashboard";
+    case "LISTING_REJECTED":
+      return "/dashboard";
+    case "SAVE":
+      return "/saved";
+    case "ITINERARY":
+      return "/ai-planner";
+    case "REMINDER":
+      return "/ai-planner";
+    // Traveler report feedback
+    case "REPORT_REVIEWED":
+    case "REPORT_ACTIONED":
+      return resourceId ? `/listing/${resourceId}` : "/browse";
+    // Admin notifications
+    case "NEW_REPORT":
+      return "/admin/reports";
+    case "LISTING_SUBMITTED":
+      return "/admin/pending";
+    case "NEW_EVENT_NEARBY":
+      return "/browse";
+    default:
+      return null;
+  }
+}
 
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -30,6 +62,7 @@ function relativeTime(iso: string): string {
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   const { data, refetch } = useQuery<{ myNotifications: AppNotification[] }>(
     MY_NOTIFICATIONS,
@@ -62,7 +95,15 @@ export function NotificationBell() {
   }, [open]);
 
   function handleNotificationClick(n: AppNotification) {
+    // Mark read
     if (!n.read) markRead({ variables: { notificationId: n.id } });
+
+    // Navigate to relevant content
+    const route = resolveRoute(n.type, n.resourceId ?? undefined);
+    if (route) {
+      setOpen(false);
+      navigate(route);
+    }
   }
 
   return (
@@ -105,27 +146,35 @@ export function NotificationBell() {
                 You're all caught up
               </div>
             ) : (
-              notifications.map((n) => (
-                <button
-                  key={n.id}
-                  onClick={() => handleNotificationClick(n)}
-                  className={`w-full text-left px-4 py-3 border-b border-slate-50 transition-colors hover:bg-slate-50 flex gap-3 items-start ${
-                    n.read ? "bg-slate-50/60" : "bg-white border-l-2 border-l-brand-500"
-                  }`}
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-semibold truncate ${n.read ? "text-slate-400" : "text-slate-800"}`}>
-                      {n.title}
-                    </p>
-                    <p className={`text-xs mt-0.5 line-clamp-2 ${n.read ? "text-slate-400" : "text-slate-500"}`}>
-                      {n.body}
-                    </p>
-                  </div>
-                  <span className="text-[10px] text-slate-400 whitespace-nowrap mt-0.5 shrink-0">
-                    {relativeTime(n.createdAt)}
-                  </span>
-                </button>
-              ))
+              notifications.map((n) => {
+                const route = resolveRoute(n.type, n.resourceId ?? undefined);
+                return (
+                  <button
+                    key={n.id}
+                    onClick={() => handleNotificationClick(n)}
+                    className={`w-full text-left px-4 py-3 border-b border-slate-50 transition-colors flex gap-3 items-start ${
+                      route ? "cursor-pointer hover:bg-slate-50" : "cursor-default"
+                    } ${n.read ? "bg-slate-50/60" : "bg-white border-l-2 border-l-brand-500"}`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-semibold truncate ${n.read ? "text-slate-400" : "text-slate-800"}`}>
+                        {n.title}
+                      </p>
+                      <p className={`text-xs mt-0.5 line-clamp-2 ${n.read ? "text-slate-400" : "text-slate-500"}`}>
+                        {n.body}
+                      </p>
+                      {route && (
+                        <p className="text-[10px] text-brand-500 font-medium mt-1">
+                          Tap to view →
+                        </p>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-slate-400 whitespace-nowrap mt-0.5 shrink-0">
+                      {relativeTime(n.createdAt)}
+                    </span>
+                  </button>
+                );
+              })
             )}
           </div>
         </div>
