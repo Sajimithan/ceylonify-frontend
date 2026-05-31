@@ -16,6 +16,7 @@ import {
   SAVED_CHATS,
   DELETE_SAVED_CHAT,
 } from "./ai-planner.gql";
+import { gql } from "@apollo/client";
 
 type Message = {
   role: "user" | "assistant";
@@ -42,9 +43,18 @@ type MeData = {
   me: {
     subscriptionTier: string;
     isPremium: boolean;
+    role: string;
     aiUsage: AiUsage;
   };
 };
+
+type FlagItem = { key: string; enabledForTravelers: boolean; enabledForHosts: boolean };
+
+const FEATURE_FLAGS_QUERY = gql`
+  query FeatureFlagsForPlanner {
+    featureFlags { key enabledForTravelers enabledForHosts }
+  }
+`;
 
 type SavedChat = {
   id: string;
@@ -175,6 +185,7 @@ export function AiPlanner() {
   const { data: historyData, refetch: refetchHistory } = useQuery<SavedChatsData>(SAVED_CHATS, {
     fetchPolicy: "network-only",
   });
+  const { data: flagsData } = useQuery<{ featureFlags: FlagItem[] }>(FEATURE_FLAGS_QUERY);
 
   const [planItinerary, { loading: aiLoading }] = useMutation(PLAN_ITINERARY);
   const [saveChat] = useMutation(SAVE_CHAT);
@@ -182,7 +193,14 @@ export function AiPlanner() {
 
   const usage = usageData?.me?.aiUsage;
   const tier = usageData?.me?.subscriptionTier ?? "FREE";
+  const role = usageData?.me?.role ?? "TRAVELER";
   const isLocked = usage ? usage.remaining <= 0 : false;
+
+  const plannerFlag = flagsData?.featureFlags?.find((f) => f.key === "AI_TRIP_PLANNER");
+  const featureDisabled = plannerFlag
+    ? (role === "TRAVELER" && !plannerFlag.enabledForTravelers) ||
+      (role === "HOST" && !plannerFlag.enabledForHosts)
+    : false;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -265,6 +283,23 @@ export function AiPlanner() {
   function clearChat() {
     setMessages([]);
     setLastListings([]);
+  }
+
+  if (featureDisabled) {
+    return (
+      <DashboardLayout title="AI Travel Planner" subtitle="Plan your perfect Sri Lanka trip with AI assistance">
+        <div className="max-w-lg mx-auto mt-16 text-center">
+          <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
+            <LockClosedIcon className="w-7 h-7 text-slate-400" />
+          </div>
+          <h2 className="text-xl font-bold text-slate-800 mb-2">Feature Disabled</h2>
+          <p className="text-slate-500 text-sm">
+            The AI Trip Planner has been temporarily disabled by an administrator.
+            Please check back later or contact support.
+          </p>
+        </div>
+      </DashboardLayout>
+    );
   }
 
   return (

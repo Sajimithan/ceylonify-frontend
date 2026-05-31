@@ -4,7 +4,7 @@ import { useMutation, useQuery } from "@apollo/client/react";
 import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { DashboardLayout } from "../../layouts/DashboardLayout";
 import { Button } from "../../ui/Button";
-import { ADMIN_ALL_USERS, ADMIN_CHANGE_USER_ROLE, ADMIN_UPDATE_SUBSCRIPTION } from "./admin.gql";
+import { ADMIN_ALL_USERS, ADMIN_CHANGE_USER_ROLE, ADMIN_UPDATE_SUBSCRIPTION, ADMIN_UPDATE_USER_PHONE } from "./admin.gql";
 
 type UserRecord = {
   id: string;
@@ -14,6 +14,7 @@ type UserRecord = {
   createdAt: string;
   badgeLevel?: string;
   approvedCount?: number;
+  phone?: string;
 };
 
 const BADGE_EMOJI: Record<string, string> = {
@@ -52,9 +53,12 @@ export function AdminUsers() {
 
   const [changeRole, { loading: updating }] = useMutation(ADMIN_CHANGE_USER_ROLE);
   const [updateSubscription, { loading: updatingSub }] = useMutation(ADMIN_UPDATE_SUBSCRIPTION);
+  const [updatePhone] = useMutation(ADMIN_UPDATE_USER_PHONE);
   const [editingId, setEditingId]     = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState("TRAVELER");
   const [search, setSearch]           = useState("");
+  const [editingPhoneUid, setEditingPhoneUid] = useState<string | null>(null);
+  const [phoneInput, setPhoneInput]   = useState("");
 
   async function handleRoleChange(id: string) {
     if (!editingId) return;
@@ -64,6 +68,18 @@ export function AdminUsers() {
       await refetch();
     } catch (e) {
       console.error("Failed to update role", e);
+    }
+  }
+
+  async function handleSavePhone(firebaseUid: string) {
+    if (!phoneInput.trim()) return;
+    try {
+      await updatePhone({ variables: { firebaseUid, phone: phoneInput.trim() } });
+      setEditingPhoneUid(null);
+      setPhoneInput("");
+      await refetch();
+    } catch (e) {
+      console.error("Failed to update phone", e);
     }
   }
 
@@ -164,6 +180,55 @@ export function AdminUsers() {
                           <div className="text-[10px] font-mono text-slate-400 mt-0.5">
                             {u.id.slice(0, 8)}…
                           </div>
+                          {/* Phone for HOST users */}
+                          {u.role === "HOST" && (
+                            <div className="mt-1">
+                              {editingPhoneUid === u.firebaseUid ? (
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="tel"
+                                    value={phoneInput}
+                                    onChange={(e) => setPhoneInput(e.target.value)}
+                                    placeholder="+94 77 000 0000"
+                                    className="text-[10px] border border-slate-200 rounded px-2 py-1 w-36 focus:outline-none focus:ring-1 focus:ring-brand-400"
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") handleSavePhone(u.firebaseUid);
+                                      if (e.key === "Escape") { setEditingPhoneUid(null); setPhoneInput(""); }
+                                    }}
+                                    autoFocus
+                                  />
+                                  <button
+                                    onClick={() => handleSavePhone(u.firebaseUid)}
+                                    className="text-[10px] font-bold text-brand-600 hover:text-brand-800"
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    onClick={() => { setEditingPhoneUid(null); setPhoneInput(""); }}
+                                    className="text-[10px] text-slate-400 hover:text-slate-600"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              ) : u.phone ? (
+                                <button
+                                  className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-brand-600 transition-colors group"
+                                  title="Click to edit phone"
+                                  onClick={() => { setEditingPhoneUid(u.firebaseUid); setPhoneInput(u.phone ?? ""); }}
+                                >
+                                  <span>📞</span>
+                                  <span className="font-mono group-hover:underline">{u.phone}</span>
+                                </button>
+                              ) : (
+                                <button
+                                  className="text-[10px] text-slate-400 hover:text-brand-600 border border-dashed border-slate-200 hover:border-brand-300 px-2 py-0.5 rounded transition-colors"
+                                  onClick={() => { setEditingPhoneUid(u.firebaseUid); setPhoneInput(""); }}
+                                >
+                                  + Add emergency contact
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>

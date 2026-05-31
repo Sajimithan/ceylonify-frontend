@@ -28,6 +28,7 @@ import { AdminAllListings } from "../pages/admin/AdminAllListings";
 import { AdminReports } from "../pages/admin/AdminReports";
 import { AdminAuditLogs } from "../pages/admin/AdminAuditLogs";
 import { AdminHostApplications } from "../pages/admin/AdminHostApplications";
+import { AdminFeatureFlags } from "../pages/admin/AdminFeatureFlags";
 import { ForgotPassword } from "../pages/ForgotPassword";
 
 export const router = createBrowserRouter([
@@ -103,5 +104,9 @@ export const router = createBrowserRouter([
   {
     path: "/admin/host-applications",
     element: <RequireAdmin><AdminHostApplications /></RequireAdmin>,
+  },
+  {
+    path: "/admin/features",
+    element: <RequireAdmin><AdminFeatureFlags /></RequireAdmin>,
   },
 ]);

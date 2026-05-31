@@ -4,7 +4,8 @@ import {
   ActivityIndicator, Linking, StyleSheet, Alert, Modal, TextInput,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ChevronLeft, Share2, Heart, MapPin, Clock, Tag, Navigation, Cloud, Flag } from 'lucide-react-native';
+import { ChevronLeft, Share2, Heart, MapPin, Clock, Tag, Navigation, Cloud, Flag, X as XIcon, Plus } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useGraphQL, gqlFetch } from '../../src/hooks/useGraphQL';
 import { WebView } from 'react-native-webview';
 
@@ -29,11 +30,11 @@ const GET_LISTING_QUERY = `
 const SAVED_LISTINGS_QUERY = `query SavedListings { savedListings { id } }`;
 const SAVE_MUTATION = `mutation SaveListing($listingId: ID!) { saveListing(listingId: $listingId) }`;
 const UNSAVE_MUTATION = `mutation UnsaveListing($listingId: ID!) { unsaveListing(listingId: $listingId) }`;
-const REPORT_MUTATION = `mutation ReportListing($listingId: ID!, $reason: String!, $comment: String) {
-  reportListing(listingId: $listingId, reason: $reason, comment: $comment)
+const REPORT_MUTATION = `mutation ReportListing($listingId: ID!, $reason: String!, $comment: String, $imageUrls: [String]) {
+  reportListing(listingId: $listingId, reason: $reason, comment: $comment, imageUrls: $imageUrls)
 }`;
 
-const REPORT_REASONS = ['Inaccurate information', 'Inappropriate content', 'Scam or fraud', 'Duplicate listing', 'Other'];
+const REPORT_SUGGESTIONS = ['Inaccurate information', 'Inappropriate content', 'Scam or fraud', 'Duplicate listing', 'Other'];
 
 const GMAPS_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY ?? 'AIzaSyCAisocwaWcaNQxbt2MM9Kahvu-h3a24gc';
 
@@ -136,6 +137,7 @@ export default function ListingDetailScreen() {
   const [reportVisible, setReportVisible] = useState(false);
   const [reportReason, setReportReason] = useState('');
   const [reportComment, setReportComment] = useState('');
+  const [reportImages, setReportImages] = useState<{ uri: string; name: string }[]>([]);
   const [reportSubmitting, setReportSubmitting] = useState(false);
 
   const { data, loading, error } = useGraphQL<{ listing: any }>(GET_LISTING_QUERY, { id });
@@ -176,14 +178,47 @@ export default function ListingDetailScreen() {
     }
   };
 
+  async function pickReportImage() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission required', 'Allow photo library access to attach evidence.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: false,
+      quality: 0.8,
+    });
+    if (result.canceled) return;
+    const asset = result.assets[0];
+    const name = `report_${Date.now()}.jpg`;
+    setReportImages((prev) => [...prev, { uri: asset.uri, name }]);
+  }
+
   async function submitReport() {
-    if (!reportReason || !listing) return;
+    if (!reportReason.trim() || !listing) return;
     setReportSubmitting(true);
     try {
-      await gqlFetch(REPORT_MUTATION, { listingId: listing.id, reason: reportReason, comment: reportComment || undefined });
+      const uploadedUrls: string[] = [];
+      for (const img of reportImages) {
+        const formData = new FormData();
+        formData.append('file', { uri: img.uri, name: img.name, type: 'image/jpeg' } as any);
+        const res = await fetch(`${API_BASE}/upload`, { method: 'POST', body: formData });
+        if (res.ok) {
+          const data = await res.json();
+          uploadedUrls.push(`${API_BASE}${data.url}`);
+        }
+      }
+      await gqlFetch(REPORT_MUTATION, {
+        listingId: listing.id,
+        reason: reportReason.trim(),
+        comment: reportComment.trim() || undefined,
+        imageUrls: uploadedUrls.length > 0 ? uploadedUrls : undefined,
+      });
       setReportVisible(false);
       setReportReason('');
       setReportComment('');
+      setReportImages([]);
       Alert.alert('Report submitted', 'Thank you. Our team will review this listing.');
     } catch {
       Alert.alert('Error', 'Could not submit report. Please try again.');
@@ -356,18 +391,40 @@ export default function ListingDetailScreen() {
       {/* Report modal */}
       <Modal visible={reportVisible} animationType="slide" transparent onRequestClose={() => setReportVisible(false)}>
         <View style={reportStyles.overlay}>
-          <View style={reportStyles.sheet}>
-            <Text style={reportStyles.title}>Report Listing</Text>
-            <Text style={reportStyles.subtitle}>Why are you reporting this listing?</Text>
-            {REPORT_REASONS.map((r) => (
-              <TouchableOpacity
-                key={r}
-                style={[reportStyles.reasonBtn, reportReason === r && reportStyles.reasonBtnActive]}
-                onPress={() => setReportReason(r)}
-              >
-                <Text style={[reportStyles.reasonText, reportReason === r && reportStyles.reasonTextActive]}>{r}</Text>
+          <ScrollView style={reportStyles.sheet} contentContainerStyle={{ paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+              <Text style={reportStyles.title}>Report Listing</Text>
+              <TouchableOpacity onPress={() => setReportVisible(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <XIcon size={20} color="#667085" />
               </TouchableOpacity>
-            ))}
+            </View>
+            <Text style={reportStyles.subtitle}>Select a suggestion or describe your reason below.</Text>
+
+            {/* Suggestion chips */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }} contentContainerStyle={{ gap: 8, paddingRight: 4 }}>
+              {REPORT_SUGGESTIONS.map((s) => (
+                <TouchableOpacity
+                  key={s}
+                  style={[reportStyles.chip, reportReason === s && reportStyles.chipActive]}
+                  onPress={() => setReportReason(s)}
+                >
+                  <Text style={[reportStyles.chipText, reportReason === s && reportStyles.chipTextActive]}>{s}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {/* Free-text reason */}
+            <TextInput
+              style={reportStyles.reasonInput}
+              placeholder="Describe your reason… (required)"
+              placeholderTextColor="#9CA3AF"
+              value={reportReason}
+              onChangeText={setReportReason}
+              multiline
+              numberOfLines={2}
+            />
+
+            {/* Additional comment */}
             <TextInput
               style={reportStyles.commentInput}
               placeholder="Additional comments (optional)"
@@ -377,18 +434,41 @@ export default function ListingDetailScreen() {
               multiline
               numberOfLines={3}
             />
+
+            {/* Image attachments */}
+            <Text style={reportStyles.photoLabel}>Add Photos (optional)</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+              {reportImages.map((img, i) => (
+                <View key={i} style={{ position: 'relative' }}>
+                  <Image source={{ uri: img.uri }} style={reportStyles.thumb} />
+                  <TouchableOpacity
+                    style={reportStyles.thumbRemove}
+                    onPress={() => setReportImages((prev) => prev.filter((_, idx) => idx !== i))}
+                  >
+                    <XIcon size={10} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+              {reportImages.length < 3 && (
+                <TouchableOpacity style={reportStyles.addPhotoBtn} onPress={pickReportImage}>
+                  <Plus size={20} color="#9CA3AF" />
+                </TouchableOpacity>
+              )}
+            </View>
+
             <View style={reportStyles.actions}>
               <TouchableOpacity style={reportStyles.cancelBtn} onPress={() => setReportVisible(false)}>
                 <Text style={reportStyles.cancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[reportStyles.submitBtn, (!reportReason || reportSubmitting) && { opacity: 0.5 }]}
+                style={[reportStyles.submitBtn, (!reportReason.trim() || reportSubmitting) && { opacity: 0.5 }]}
                 onPress={submitReport}
-                disabled={!reportReason || reportSubmitting}
+                disabled={!reportReason.trim() || reportSubmitting}
               >
                 <Text style={reportStyles.submitText}>{reportSubmitting ? 'Submitting…' : 'Submit Report'}</Text>
               </TouchableOpacity>
             </View>
+          </ScrollView>
           </View>
         </View>
       </Modal>
@@ -472,26 +552,41 @@ const styles = StyleSheet.create({
 });
 
 const reportStyles = StyleSheet.create({
-  overlay: {
-    flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)',
-  },
+  overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' },
   sheet: {
     backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    padding: 24, paddingBottom: 40,
+    paddingHorizontal: 24, paddingTop: 24, maxHeight: '90%',
   },
   title: { fontSize: 18, fontWeight: 'bold', color: '#0B1220', marginBottom: 4 },
-  subtitle: { fontSize: 13, color: '#667085', marginBottom: 16 },
-  reasonBtn: {
-    borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10,
-    paddingHorizontal: 14, paddingVertical: 11, marginBottom: 8,
+  subtitle: { fontSize: 13, color: '#667085', marginBottom: 12 },
+  chip: {
+    borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 999,
+    paddingHorizontal: 14, paddingVertical: 8,
   },
-  reasonBtnActive: { borderColor: '#0EA5A4', backgroundColor: '#E0F6F6' },
-  reasonText: { fontSize: 14, color: '#374151' },
-  reasonTextActive: { color: '#0B7A79', fontWeight: '600' },
+  chipActive: { borderColor: '#0EA5A4', backgroundColor: '#E0F6F6' },
+  chipText: { fontSize: 13, color: '#374151' },
+  chipTextActive: { color: '#0B7A79', fontWeight: '600' },
+  reasonInput: {
+    borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10,
+    paddingHorizontal: 14, paddingVertical: 10, fontSize: 13, color: '#374151',
+    marginBottom: 10, textAlignVertical: 'top', minHeight: 60,
+  },
   commentInput: {
     borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10,
     paddingHorizontal: 14, paddingVertical: 10, fontSize: 13, color: '#374151',
-    marginTop: 8, marginBottom: 16, textAlignVertical: 'top',
+    marginBottom: 14, textAlignVertical: 'top',
+  },
+  photoLabel: { fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 8 },
+  thumb: { width: 72, height: 72, borderRadius: 10 },
+  thumbRemove: {
+    position: 'absolute', top: -6, right: -6,
+    backgroundColor: '#EF4444', borderRadius: 999, width: 18, height: 18,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  addPhotoBtn: {
+    width: 72, height: 72, borderRadius: 10,
+    borderWidth: 1, borderColor: '#E5E7EB', borderStyle: 'dashed',
+    alignItems: 'center', justifyContent: 'center',
   },
   actions: { flexDirection: 'row', gap: 12 },
   cancelBtn: {

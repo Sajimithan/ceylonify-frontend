@@ -25,6 +25,7 @@ export const MY_AI_USAGE = gql`
     me {
       subscriptionTier
       isPremium
+      role
       aiUsage {
         requestsUsed
         monthlyLimit

@@ -17,6 +17,7 @@ import {
   FlagIcon,
   ShieldCheckIcon,
   DocumentCheckIcon,
+  Cog6ToothIcon,
   ArrowLeftStartOnRectangleIcon,
   Bars3Icon,
   XMarkIcon,
@@ -38,6 +39,7 @@ const NAV_ICONS: Record<string, React.ElementType> = {
   "/admin/host-applications":  DocumentCheckIcon,
   "/admin/reports":            FlagIcon,
   "/admin/audit-logs":         ClockIcon,
+  "/admin/features":           Cog6ToothIcon,
 };
 
 function NavLink({
@@ -191,6 +193,7 @@ export function DashboardLayout({
                 <NavLink to="/admin/host-applications" onNav={closeSidebar}>Host Applications</NavLink>
                 <NavLink to="/admin/reports" onNav={closeSidebar}>Reports</NavLink>
                 <NavLink to="/admin/audit-logs" onNav={closeSidebar}>Audit Logs</NavLink>
+                <NavLink to="/admin/features" onNav={closeSidebar}>Feature Control</NavLink>
                 <NavLink to="/host/profile" onNav={closeSidebar}>Profile & Settings</NavLink>
               </ul>
             </div>
