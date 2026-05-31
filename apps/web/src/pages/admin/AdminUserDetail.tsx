@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@apollo/client/react";
 import { DashboardLayout } from "../../layouts/DashboardLayout";
 import { ADMIN_HOST_DETAIL } from "../hosts.gql";
+import { ADMIN_SUBSCRIPTION_HISTORY } from "./admin.gql";
 import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 
 const BADGE_EMOJI: Record<string, string> = { DIAMOND: "💎", GOLD: "🥇", SILVER: "🥈", BRONZE: "🥉", NONE: "" };
@@ -34,8 +35,13 @@ export function AdminUserDetail() {
     variables: { firebaseUid },
     skip: !firebaseUid,
   });
+  const { data: historyData } = useQuery(ADMIN_SUBSCRIPTION_HISTORY, {
+    variables: { firebaseUid },
+    skip: !firebaseUid,
+  });
 
   const host = data?.adminHostDetail;
+  const subscriptionHistory = historyData?.adminSubscriptionHistory ?? [];
 
   return (
     <DashboardLayout title="Host Detail" subtitle="View host performance and event history">
@@ -95,6 +101,21 @@ export function AdminUserDetail() {
                 </div>
               ))}
             </div>
+
+            {/* Subscription History */}
+            {subscriptionHistory.length > 0 && (
+              <div className="bg-white rounded-xl shadow p-5 mb-5">
+                <h2 className="text-slate-400 font-bold text-xs uppercase mb-3">Subscription History</h2>
+                <div className="space-y-2">
+                  {subscriptionHistory.map((e: { id: string; fromTier: string; toTier: string; changedAt: string; changedBy: string }) => (
+                    <div key={e.id} className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-slate-600">{e.fromTier} → <span className={e.toTier === 'PREMIUM' ? 'text-amber-600' : 'text-slate-400'}>{e.toTier}</span></span>
+                      <span className="text-slate-400">{new Date(e.changedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Tab bar */}
             <div className="mb-4 flex items-center gap-1 bg-white rounded-xl shadow px-2 py-1.5 w-fit">

@@ -70,6 +70,11 @@ export function TravelerAccount() {
           {isPremium && (
             <div className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-700 font-semibold text-center">
               You're on Premium! Enjoy all features.
+              {me?.subscriptionExpiresAt && (
+                <div className="text-xs text-emerald-600 font-normal mt-1">
+                  Expires {new Date(me.subscriptionExpiresAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                </div>
+              )}
             </div>
           )}
         </div>

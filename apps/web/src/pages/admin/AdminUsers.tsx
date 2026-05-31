@@ -4,7 +4,7 @@ import { useMutation, useQuery } from "@apollo/client/react";
 import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { DashboardLayout } from "../../layouts/DashboardLayout";
 import { Button } from "../../ui/Button";
-import { ADMIN_ALL_USERS, ADMIN_CHANGE_USER_ROLE, ADMIN_UPDATE_SUBSCRIPTION, ADMIN_UPDATE_USER_PHONE } from "./admin.gql";
+import { ADMIN_ALL_USERS, ADMIN_CHANGE_USER_ROLE, ADMIN_UPDATE_SUBSCRIPTION, ADMIN_UPDATE_USER_PHONE, ADMIN_SUSPEND_USER, ADMIN_ACTIVATE_USER } from "./admin.gql";
 
 type UserRecord = {
   id: string;
@@ -15,6 +15,8 @@ type UserRecord = {
   badgeLevel?: string;
   approvedCount?: number;
   phone?: string;
+  isSuspended?: boolean;
+  subscriptionExpiresAt?: string;
 };
 
 const BADGE_EMOJI: Record<string, string> = {
@@ -55,6 +57,8 @@ export function AdminUsers() {
   const [changeRole, { loading: updating }] = useMutation(ADMIN_CHANGE_USER_ROLE);
   const [updateSubscription, { loading: updatingSub }] = useMutation(ADMIN_UPDATE_SUBSCRIPTION);
   const [updatePhone] = useMutation(ADMIN_UPDATE_USER_PHONE);
+  const [suspendUser] = useMutation(ADMIN_SUSPEND_USER, { onCompleted: () => refetch() });
+  const [activateUser] = useMutation(ADMIN_ACTIVATE_USER, { onCompleted: () => refetch() });
   const [editingId, setEditingId]     = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState("TRAVELER");
   const [search, setSearch]           = useState("");
@@ -175,11 +179,16 @@ export function AdminUsers() {
                           {userInitials(u.email)}
                         </div>
                         <div>
-                          <div
-                            className={`text-sm font-semibold leading-tight ${u.role === "HOST" ? "text-brand-600 hover:underline cursor-pointer" : "text-slate-700"}`}
-                            onClick={() => u.role === "HOST" && nav(`/admin/users/${u.firebaseUid}`)}
-                          >
-                            {u.email || "No Email (Provider Auth)"}
+                          <div className="flex items-center gap-1.5">
+                            <div
+                              className={`text-sm font-semibold leading-tight ${u.role === "HOST" ? "text-brand-600 hover:underline cursor-pointer" : "text-slate-700"}`}
+                              onClick={() => u.role === "HOST" && nav(`/admin/users/${u.firebaseUid}`)}
+                            >
+                              {u.email || "No Email (Provider Auth)"}
+                            </div>
+                            {u.isSuspended && (
+                              <span className="text-[9px] font-bold bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full uppercase">Suspended</span>
+                            )}
                           </div>
                           <div className="text-[10px] font-mono text-slate-400 mt-0.5">
                             {u.id.slice(0, 8)}…
@@ -362,6 +371,28 @@ export function AdminUsers() {
                               >
                                 Revoke Premium
                               </button>
+                            )}
+                            {u.role !== "ADMIN" && (
+                              u.isSuspended ? (
+                                <button
+                                  className="text-[10px] font-bold text-emerald-600 border border-emerald-200 hover:bg-emerald-50 px-3 py-1 rounded-lg transition-colors"
+                                  title="Re-activate this account"
+                                  onClick={() => activateUser({ variables: { firebaseUid: u.firebaseUid } })}
+                                >
+                                  Activate
+                                </button>
+                              ) : (
+                                <button
+                                  className="text-[10px] font-bold text-red-500 border border-red-200 hover:bg-red-50 px-3 py-1 rounded-lg transition-colors"
+                                  title="Suspend this account"
+                                  onClick={() => {
+                                    if (confirm(`Suspend account for ${u.email ?? u.firebaseUid}?`))
+                                      suspendUser({ variables: { firebaseUid: u.firebaseUid } });
+                                  }}
+                                >
+                                  Suspend
+                                </button>
+                              )
                             )}
                           </>
                         )}

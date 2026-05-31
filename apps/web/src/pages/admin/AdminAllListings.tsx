@@ -9,7 +9,7 @@ import { Badge } from "../../ui/Badge";
 import { Button } from "../../ui/Button";
 import { Input } from "../../ui/Input";
 import { XMarkIcon } from "@heroicons/react/24/outline";
-import { ADMIN_ALL_LISTINGS, ADMIN_ALL_USERS } from "./admin.gql";
+import { ADMIN_ALL_LISTINGS, ADMIN_ALL_USERS, ADMIN_SUSPEND_LISTING } from "./admin.gql";
 import { APPROVE_LISTING, REJECT_LISTING, AI_REVIEW_LISTING } from "./moderation.gql";
 
 type Listing = {
@@ -235,10 +235,29 @@ function ListingDetailModal({
               </div>
             )}
 
-            {/* APPROVED: Take Down */}
+            {/* SUSPENDED: indicator */}
+            {listing.status === "SUSPENDED" && (
+              <div className="flex items-center gap-2 bg-orange-50 border border-orange-200 rounded-xl px-4 py-3">
+                <span className="text-orange-500 text-sm font-bold">⚠️ Suspended</span>
+                <span className="text-xs text-orange-600 flex-1">This listing is suspended and hidden from travelers.</span>
+              </div>
+            )}
+
+            {/* APPROVED: Take Down + Suspend */}
             {listing.status === "APPROVED" && !showRejectForm && (
               <div className="flex gap-3">
                 <div className="flex-1 text-xs text-slate-400 italic flex items-center">Currently live and visible to travelers.</div>
+                <Button
+                  variant="ghost"
+                  className="border border-orange-200 text-orange-600 hover:bg-orange-50"
+                  disabled={suspending}
+                  onClick={() => {
+                    if (confirm(`Suspend "${listing.title}"? It will be hidden from travelers.`))
+                      suspendListing({ variables: { id: listing.id } });
+                  }}
+                >
+                  ⚠️ Suspend
+                </Button>
                 <Button
                   variant="ghost"
                   className="border border-red-200 text-red-500"
@@ -316,6 +335,9 @@ export function AdminAllListings() {
   const [filter, setFilter] = useState<FilterStatus>("ALL");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Listing | null>(null);
+  const [suspendListing, { loading: suspending }] = useMutation(ADMIN_SUSPEND_LISTING, {
+    onCompleted: () => { refetch(); setSelected(null); },
+  });
 
   const users = usersData?.adminAllUsers ?? [];
   const all = data?.adminAllListings ?? [];

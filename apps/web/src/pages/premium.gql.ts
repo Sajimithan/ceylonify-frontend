@@ -9,6 +9,7 @@ export const ME_VERIFICATION_STATUS = gql`
       emailVerifiedAt
       phoneVerifiedAt
       phone
+      subscriptionExpiresAt
     }
   }
 `;

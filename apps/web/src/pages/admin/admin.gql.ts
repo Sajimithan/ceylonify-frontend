@@ -28,6 +28,44 @@ export const ADMIN_ALL_USERS = gql`
       badgeLevel
       approvedCount
       phone
+      isSuspended
+      subscriptionExpiresAt
+    }
+  }
+`;
+
+export const ADMIN_SUSPEND_USER = gql`
+  mutation AdminSuspendUser($firebaseUid: String!) {
+    adminSuspendUser(firebaseUid: $firebaseUid)
+  }
+`;
+
+export const ADMIN_ACTIVATE_USER = gql`
+  mutation AdminActivateUser($firebaseUid: String!) {
+    adminActivateUser(firebaseUid: $firebaseUid)
+  }
+`;
+
+export const ADMIN_SUSPEND_LISTING = gql`
+  mutation AdminSuspendListing($id: String!) {
+    adminSuspendListing(id: $id)
+  }
+`;
+
+export const ADMIN_BROADCAST_ANNOUNCEMENT = gql`
+  mutation AdminBroadcastAnnouncement($title: String!, $body: String!) {
+    adminBroadcastAnnouncement(title: $title, body: $body)
+  }
+`;
+
+export const ADMIN_SUBSCRIPTION_HISTORY = gql`
+  query AdminSubscriptionHistory($firebaseUid: String!) {
+    adminSubscriptionHistory(firebaseUid: $firebaseUid) {
+      id
+      fromTier
+      toTier
+      changedAt
+      changedBy
     }
   }
 `;
