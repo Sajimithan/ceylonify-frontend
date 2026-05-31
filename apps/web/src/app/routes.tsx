@@ -20,10 +20,16 @@ import { ListingDetail } from "../pages/ListingDetail";
 // AI Planner
 import { AiPlanner } from "../pages/AiPlanner";
 
+// New feature pages
+import { Experienced } from "../pages/Experienced";
+import { HostPublicProfile } from "../pages/HostPublicProfile";
+import { TravelerAccount } from "../pages/TravelerAccount";
+
 // Admin pages
 import { AdminPendingListings } from "../pages/admin/AdminPendingListings";
 import { AdminOverview } from "../pages/admin/AdminOverview";
 import { AdminUsers } from "../pages/admin/AdminUsers";
+import { AdminUserDetail } from "../pages/admin/AdminUserDetail";
 import { AdminAllListings } from "../pages/admin/AdminAllListings";
 import { AdminReports } from "../pages/admin/AdminReports";
 import { AdminAuditLogs } from "../pages/admin/AdminAuditLogs";
@@ -60,6 +66,18 @@ export const router = createBrowserRouter([
     element: <RequireHost><AiPlanner /></RequireHost>,
   },
   {
+    path: "/experienced",
+    element: <RequireHost><Experienced /></RequireHost>,
+  },
+  {
+    path: "/hosts/:firebaseUid",
+    element: <RequireHost><HostPublicProfile /></RequireHost>,
+  },
+  {
+    path: "/account",
+    element: <RequireHost><TravelerAccount /></RequireHost>,
+  },
+  {
     path: "/host/create",
     element: <RequireHost><CreateListing /></RequireHost>,
   },
@@ -92,6 +110,10 @@ export const router = createBrowserRouter([
   {
     path: "/admin/users",
     element: <RequireAdmin><AdminUsers /></RequireAdmin>,
+  },
+  {
+    path: "/admin/users/:firebaseUid",
+    element: <RequireAdmin><AdminUserDetail /></RequireAdmin>,
   },
   {
     path: "/admin/reports",

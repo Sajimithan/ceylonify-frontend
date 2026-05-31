@@ -8,6 +8,10 @@ import { Badge } from "../ui/Badge";
 import { ME_QUERY, SEARCH_LISTINGS, NEARBY_LISTINGS_QUERY } from "./browse.gql";
 import { useFeatureFlags } from "../auth/useFeatureFlags";
 import { MY_SAVED_LISTINGS, SAVE_LISTING, UNSAVE_LISTING } from "./host/saved.gql";
+import { ALL_HOSTS } from "./hosts.gql";
+import { MARK_GOING, UNMARK_GOING, MY_ITINERARY_GOING } from "./going.gql";
+
+const BADGE_EMOJI: Record<string, string> = { DIAMOND: '💎', GOLD: '🥇', SILVER: '🥈', BRONZE: '🥉', NONE: '' };
 
 type Listing = {
   id: string;
@@ -21,8 +25,18 @@ type Listing = {
   isPremium: boolean;
   viewCount: number;
   createdAt: string;
+  startDateTime?: string;
   lat?: number;
   lng?: number;
+};
+
+type HostCard = {
+  firebaseUid: string;
+  displayName?: string;
+  avatarUrl?: string;
+  badgeLevel: string;
+  approvedCount: number;
+  createdAt: string;
 };
 
 const LIMIT = 12;
@@ -46,6 +60,7 @@ export function Browse() {
   const [activeMarkerId, setActiveMarkerId] = useState<string | null>(null);
   const [nearMeLoading, setNearMeLoading] = useState(false);
   const [nearMeError, setNearMeError] = useState<string | null>(null);
+  const [browseMode, setBrowseMode] = useState<"experiences" | "hosts">("experiences");
 
   const { isLoaded: mapsLoaded } = useJsApiLoader({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string,
@@ -72,6 +87,16 @@ export function Browse() {
 
   const [search, { data, loading }] = useLazyQuery(SEARCH_LISTINGS);
   const [fetchNearby] = useLazyQuery(NEARBY_LISTINGS_QUERY);
+  const [fetchHosts, { data: hostsData, loading: hostsLoading }] = useLazyQuery(ALL_HOSTS);
+  const { data: itineraryGoingData } = useQuery(MY_ITINERARY_GOING);
+  const [markGoing] = useMutation(MARK_GOING);
+  const [unmarkGoing] = useMutation(UNMARK_GOING);
+
+  const goingIds = new Set<string>(
+    (itineraryGoingData?.myItinerary ?? [])
+      .filter((i: { isGoingEntry: boolean }) => i.isGoingEntry)
+      .map((i: { listingId: string }) => i.listingId)
+  );
 
   const runSearch = useCallback(
     (resetOffset = false) => {
@@ -85,6 +110,7 @@ export function Browse() {
           offset: newOffset,
           startAfter: startAfter || undefined,
           startBefore: startBefore || undefined,
+          hidePastEvents: true,
         },
       });
     },
@@ -145,6 +171,21 @@ export function Browse() {
     nav(`/listing/${listing.id}`);
   }
 
+  async function handleGoing(e: React.MouseEvent, listingId: string, isGoing: boolean) {
+    e.stopPropagation();
+    if (isGoing) {
+      await unmarkGoing({ variables: { listingId } });
+    } else {
+      await markGoing({ variables: { listingId } });
+    }
+  }
+
+  useEffect(() => {
+    if (browseMode === 'hosts') {
+      fetchHosts({ variables: { limit: 40, offset: 0 } });
+    }
+  }, [browseMode]); // eslint-disable-line
+
   async function handleNearMe() {
     setNearMeError(null);
     if (!navigator.geolocation) {
@@ -201,6 +242,65 @@ export function Browse() {
       )}
 
       <div className="mx-auto w-full max-w-7xl">
+        {/* Experiences | Hosts toggle */}
+        <div className="mb-5 flex items-center gap-1 bg-white rounded-xl shadow px-2 py-1.5 w-fit">
+          <button
+            onClick={() => setBrowseMode("experiences")}
+            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-colors ${browseMode === "experiences" ? "bg-brand-500 text-white" : "text-slate-500 hover:text-slate-700"}`}
+          >
+            🌴 Experiences
+          </button>
+          <button
+            onClick={() => setBrowseMode("hosts")}
+            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-colors ${browseMode === "hosts" ? "bg-brand-500 text-white" : "text-slate-500 hover:text-slate-700"}`}
+          >
+            👥 Hosts
+          </button>
+        </div>
+
+        {/* Host grid */}
+        {browseMode === "hosts" && (
+          <div>
+            {hostsLoading && (
+              <div className="text-sm text-slate-400 font-semibold py-8 text-center">Loading hosts…</div>
+            )}
+            {!hostsLoading && (hostsData?.allHosts ?? []).length === 0 && (
+              <div className="text-center py-16 text-slate-400 font-semibold">No hosts found.</div>
+            )}
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {(hostsData?.allHosts ?? []).map((host: HostCard) => {
+                const initials = (host.displayName ?? host.firebaseUid.slice(0, 2)).slice(0, 2).toUpperCase();
+                return (
+                  <div
+                    key={host.firebaseUid}
+                    className="bg-white rounded-xl shadow-lg p-5 cursor-pointer hover:shadow-xl transition-shadow flex flex-col items-center text-center gap-2"
+                    onClick={() => nav(`/hosts/${host.firebaseUid}`)}
+                  >
+                    {host.avatarUrl ? (
+                      <img src={host.avatarUrl} alt={host.displayName ?? "Host"} className="w-16 h-16 rounded-full object-cover" />
+                    ) : (
+                      <div className="w-16 h-16 rounded-full bg-brand-100 flex items-center justify-center text-brand-600 font-bold text-xl">
+                        {initials}
+                      </div>
+                    )}
+                    <div className="font-bold text-slate-700">{host.displayName ?? "Host"}</div>
+                    <div className="text-xs text-slate-400">
+                      {BADGE_EMOJI[host.badgeLevel]} {host.badgeLevel !== 'NONE' ? host.badgeLevel : ''}
+                      {host.approvedCount > 0 && ` · ${host.approvedCount} events`}
+                    </div>
+                    <div className="text-[10px] text-slate-300">
+                      Joined {new Date(host.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {browseMode === "experiences" && (
+        <div>
+
         {/* Filters */}
         <div className="mb-6 flex flex-wrap gap-3">
           <input
@@ -463,6 +563,18 @@ export function Browse() {
                         )}
                       </div>
                     </div>
+                    {listing.type === "EVENT" && (
+                      <button
+                        onClick={(e) => handleGoing(e, listing.id, goingIds.has(listing.id))}
+                        className={`mt-3 w-full py-1.5 rounded-lg text-xs font-bold border-2 transition-colors ${
+                          goingIds.has(listing.id)
+                            ? "bg-emerald-500 border-emerald-500 text-white"
+                            : "border-emerald-500 text-emerald-600 hover:bg-emerald-50"
+                        }`}
+                      >
+                        {goingIds.has(listing.id) ? "✓ I'm Going" : "🎫 I'm Going"}
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -481,6 +593,8 @@ export function Browse() {
               {loading ? "Loading…" : "Load more"}
             </button>
           </div>
+        )}
+        </div>
         )}
       </div>
     </DashboardLayout>

@@ -24,12 +24,16 @@ import {
   Bars3Icon,
   XMarkIcon,
   SparklesIcon,
+  StarIcon,
+  CreditCardIcon,
 } from "@heroicons/react/24/outline";
 
 const NAV_ICONS: Record<string, React.ElementType> = {
   "/browse":                   MagnifyingGlassIcon,
   "/saved":                    BookmarkIcon,
   "/ai-planner":               SparklesIcon,
+  "/experienced":              StarIcon,
+  "/account":                  CreditCardIcon,
   "/dashboard":                HomeIcon,
   "/host/create":              PlusCircleIcon,
   "/host/analytics":           ChartBarIcon,
@@ -55,7 +59,9 @@ function NavLink({
 }) {
   const { pathname } = useLocation();
   const active =
-    pathname === to || (to !== "/dashboard" && pathname.startsWith(to));
+    pathname === to ||
+    (to !== "/dashboard" && to !== "/admin/users" && pathname.startsWith(to)) ||
+    (to === "/admin/users" && (pathname === "/admin/users" || pathname.startsWith("/admin/users/")));
   const Icon = NAV_ICONS[to] ?? HomeIcon;
 
   return (
@@ -165,8 +171,12 @@ export function DashboardLayout({
             <ul className="space-y-0.5">
               <NavLink to="/browse" onNav={closeSidebar}>Browse Experiences</NavLink>
               <NavLink to="/saved" onNav={closeSidebar}>Saved Listings</NavLink>
+              <NavLink to="/experienced" onNav={closeSidebar}>My Experiences</NavLink>
               {isEnabledFor("AI_TRIP_PLANNER", "HOST") && (
                 <NavLink to="/ai-planner" onNav={closeSidebar}>AI Travel Planner</NavLink>
+              )}
+              {!isAdmin && (
+                <NavLink to="/account" onNav={closeSidebar}>Account & Premium</NavLink>
               )}
             </ul>
           </div>

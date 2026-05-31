@@ -3,7 +3,7 @@ import { gql } from "@apollo/client";
 export const MY_SAVED_LISTINGS = gql`
   query MySavedListings {
     savedListings {
-      id title description type category price placeName imageUrl createdAt
+      id title description type category price placeName imageUrl createdAt startDateTime
     }
   }
 `;

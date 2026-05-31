@@ -18,6 +18,7 @@ export const SEARCH_LISTINGS = gql`
     $offset: Int
     $startAfter: String
     $startBefore: String
+    $hidePastEvents: Boolean
   ) {
     searchListings(
       q: $q
@@ -27,6 +28,7 @@ export const SEARCH_LISTINGS = gql`
       offset: $offset
       startAfter: $startAfter
       startBefore: $startBefore
+      hidePastEvents: $hidePastEvents
     ) {
       listings {
         id

@@ -18,6 +18,7 @@ type Listing = {
   type: string;
   status: string;
   createdAt: string;
+  startDateTime?: string;
   rejectionReason?: string;
   imageUrl?: string;
   isPremium?: boolean;
@@ -223,7 +224,16 @@ export function MyListings() {
     }
   }
 
-  const listings = data?.myListings ?? [];
+  const allListings = data?.myListings ?? [];
+  const now = new Date();
+  const [listingTab, setListingTab] = useState<'active' | 'past'>('active');
+  const activeListings = allListings.filter(
+    (l: Listing) => l.type !== 'EVENT' || !l.startDateTime || new Date(l.startDateTime) >= now,
+  );
+  const pastListings = allListings.filter(
+    (l: Listing) => l.type === 'EVENT' && l.startDateTime && new Date(l.startDateTime) < now,
+  );
+  const listings = listingTab === 'active' ? activeListings : pastListings;
 
   return (
     <DashboardLayout
@@ -277,6 +287,22 @@ export function MyListings() {
             )}
           </Card>
         ) : null}
+
+        {/* Active / Past tab */}
+        <div className="mb-5 flex items-center gap-1 bg-white rounded-xl shadow px-2 py-1.5 w-fit">
+          <button
+            onClick={() => setListingTab('active')}
+            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-colors ${listingTab === 'active' ? 'bg-brand-500 text-white' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            Active / Upcoming ({activeListings.length})
+          </button>
+          <button
+            onClick={() => setListingTab('past')}
+            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-colors ${listingTab === 'past' ? 'bg-slate-600 text-white' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            Past Events ({pastListings.length})
+          </button>
+        </div>
 
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {listings.map((l) => (

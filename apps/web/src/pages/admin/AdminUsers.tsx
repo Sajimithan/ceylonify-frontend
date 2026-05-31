@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@apollo/client/react";
 import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { DashboardLayout } from "../../layouts/DashboardLayout";
@@ -47,6 +47,7 @@ function userInitials(email?: string) {
 }
 
 export function AdminUsers() {
+  const nav = useNavigate();
   const { data, loading, error, refetch } = useQuery<UsersData>(ADMIN_ALL_USERS, {
     fetchPolicy: "network-only",
   });
@@ -174,7 +175,10 @@ export function AdminUsers() {
                           {userInitials(u.email)}
                         </div>
                         <div>
-                          <div className="text-sm font-semibold text-slate-700 leading-tight">
+                          <div
+                            className={`text-sm font-semibold leading-tight ${u.role === "HOST" ? "text-brand-600 hover:underline cursor-pointer" : "text-slate-700"}`}
+                            onClick={() => u.role === "HOST" && nav(`/admin/users/${u.firebaseUid}`)}
+                          >
                             {u.email || "No Email (Provider Auth)"}
                           </div>
                           <div className="text-[10px] font-mono text-slate-400 mt-0.5">

@@ -15,6 +15,7 @@ type Listing = {
   placeName?: string;
   imageUrl?: string;
   createdAt: string;
+  startDateTime?: string;
 };
 
 export function SavedListings() {
@@ -22,7 +23,12 @@ export function SavedListings() {
   const { data, loading, refetch } = useQuery(MY_SAVED_LISTINGS);
   const [unsaveListing] = useMutation(UNSAVE_LISTING);
 
-  const listings: Listing[] = data?.savedListings ?? [];
+  const now = new Date();
+  const allSaved: Listing[] = data?.savedListings ?? [];
+  const listings = allSaved.filter((l) => {
+    if (l.type !== 'EVENT' || !l.startDateTime) return true;
+    return new Date(l.startDateTime) >= now;
+  });
 
   async function handleUnsave(id: string) {
     await unsaveListing({ variables: { listingId: id } });

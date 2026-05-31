@@ -9,6 +9,7 @@ export const MY_LISTINGS = gql`
       type
       status
       createdAt
+      startDateTime
       rejectionReason
       imageUrl
       isPremium

@@ -1,0 +1,38 @@
+import { gql } from "@apollo/client";
+
+export const ME_VERIFICATION_STATUS = gql`
+  query MeVerificationStatus {
+    me {
+      firebaseUid
+      isPremium
+      subscriptionTier
+      emailVerifiedAt
+      phoneVerifiedAt
+      phone
+    }
+  }
+`;
+
+export const MARK_EMAIL_VERIFIED = gql`
+  mutation MarkEmailVerified {
+    markEmailVerified
+  }
+`;
+
+export const MARK_PHONE_VERIFIED = gql`
+  mutation MarkPhoneVerified($phone: String!) {
+    markPhoneVerified(phone: $phone)
+  }
+`;
+
+export const SELF_UPGRADE_PREMIUM = gql`
+  mutation SelfUpgradeToPremium {
+    selfUpgradeToPremium {
+      firebaseUid
+      isPremium
+      subscriptionTier
+      emailVerifiedAt
+      phoneVerifiedAt
+    }
+  }
+`;
