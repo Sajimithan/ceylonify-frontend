@@ -417,13 +417,15 @@ export function ListingDetail() {
 
               {/* Action buttons */}
               <div className="space-y-2 pt-2">
-                <button
-                  onClick={toggleSave}
-                  className="w-full py-2 rounded-lg font-bold text-sm border-2 border-sky-500 text-sky-600 hover:bg-sky-50 transition-colors flex items-center justify-center gap-2"
-                >
-                  {isSaved ? "❤️ Saved" : "🤍 Save Listing"}
-                </button>
-                {listing.type === "EVENT" && (
+                {!(listing.type === "EVENT" && listing.startDateTime && new Date(listing.startDateTime) < new Date()) && (
+                  <button
+                    onClick={toggleSave}
+                    className="w-full py-2 rounded-lg font-bold text-sm border-2 border-sky-500 text-sky-600 hover:bg-sky-50 transition-colors flex items-center justify-center gap-2"
+                  >
+                    {isSaved ? "❤️ Saved" : "🤍 Save Listing"}
+                  </button>
+                )}
+                {listing.type === "EVENT" && !(listing.startDateTime && new Date(listing.startDateTime) < new Date()) && (
                   <button
                     onClick={handleGoing}
                     className={`w-full py-2 rounded-lg font-bold text-sm border-2 transition-colors flex items-center justify-center gap-2 ${
