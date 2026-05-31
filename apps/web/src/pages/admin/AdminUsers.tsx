@@ -5,6 +5,7 @@ import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { DashboardLayout } from "../../layouts/DashboardLayout";
 import { Button } from "../../ui/Button";
 import { ADMIN_ALL_USERS, ADMIN_CHANGE_USER_ROLE, ADMIN_UPDATE_SUBSCRIPTION, ADMIN_UPDATE_USER_PHONE, ADMIN_SUSPEND_USER, ADMIN_ACTIVATE_USER } from "./admin.gql";
+import { ADMIN_PENDING_HOST_APPLICATIONS } from "./host-applications.gql";
 
 type UserRecord = {
   id: string;
@@ -53,6 +54,11 @@ export function AdminUsers() {
   const { data, loading, error, refetch } = useQuery<UsersData>(ADMIN_ALL_USERS, {
     fetchPolicy: "network-only",
   });
+  const { data: appsData } = useQuery<{ adminPendingHostApplications: { firebaseUid: string }[] }>(
+    ADMIN_PENDING_HOST_APPLICATIONS,
+    { fetchPolicy: "network-only" },
+  );
+  const pendingUids = new Set((appsData?.adminPendingHostApplications ?? []).map((a) => a.firebaseUid));
 
   const [changeRole, { loading: updating }] = useMutation(ADMIN_CHANGE_USER_ROLE);
   const [updateSubscription, { loading: updatingSub }] = useMutation(ADMIN_UPDATE_SUBSCRIPTION);
@@ -271,6 +277,11 @@ export function AdminUsers() {
                           >
                             {u.role}
                           </span>
+                          {u.role === "TRAVELER" && pendingUids.has(u.firebaseUid) && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border w-fit bg-amber-50 text-amber-700 border-amber-300">
+                              ⏳ Host Pending
+                            </span>
+                          )}
                           {u.badgeLevel && u.badgeLevel !== "NONE" && (
                             <span
                               className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border w-fit ${BADGE_STYLE[u.badgeLevel] ?? ""}`}
