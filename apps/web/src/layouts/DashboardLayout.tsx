@@ -20,11 +20,13 @@ import {
   ArrowLeftStartOnRectangleIcon,
   Bars3Icon,
   XMarkIcon,
+  SparklesIcon,
 } from "@heroicons/react/24/outline";
 
 const NAV_ICONS: Record<string, React.ElementType> = {
   "/browse":                   MagnifyingGlassIcon,
   "/saved":                    BookmarkIcon,
+  "/ai-planner":               SparklesIcon,
   "/dashboard":                HomeIcon,
   "/host/create":              PlusCircleIcon,
   "/host/analytics":           ChartBarIcon,
@@ -158,6 +160,7 @@ export function DashboardLayout({
             <ul className="space-y-0.5">
               <NavLink to="/browse" onNav={closeSidebar}>Browse Experiences</NavLink>
               <NavLink to="/saved" onNav={closeSidebar}>Saved Listings</NavLink>
+              <NavLink to="/ai-planner" onNav={closeSidebar}>AI Travel Planner</NavLink>
             </ul>
           </div>
 

@@ -17,6 +17,9 @@ import { HostProfile } from "../pages/host/HostProfile";
 import { Browse } from "../pages/Browse";
 import { ListingDetail } from "../pages/ListingDetail";
 
+// AI Planner
+import { AiPlanner } from "../pages/AiPlanner";
+
 // Admin pages
 import { AdminPendingListings } from "../pages/admin/AdminPendingListings";
 import { AdminOverview } from "../pages/admin/AdminOverview";
@@ -50,6 +53,10 @@ export const router = createBrowserRouter([
   {
     path: "/saved",
     element: <RequireHost><SavedListings /></RequireHost>,
+  },
+  {
+    path: "/ai-planner",
+    element: <RequireHost><AiPlanner /></RequireHost>,
   },
   {
     path: "/host/create",

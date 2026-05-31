@@ -4,7 +4,7 @@ import { useMutation, useQuery } from "@apollo/client/react";
 import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { DashboardLayout } from "../../layouts/DashboardLayout";
 import { Button } from "../../ui/Button";
-import { ADMIN_ALL_USERS, ADMIN_CHANGE_USER_ROLE } from "./admin.gql";
+import { ADMIN_ALL_USERS, ADMIN_CHANGE_USER_ROLE, ADMIN_UPDATE_SUBSCRIPTION } from "./admin.gql";
 
 type UserRecord = {
   id: string;
@@ -51,6 +51,7 @@ export function AdminUsers() {
   });
 
   const [changeRole, { loading: updating }] = useMutation(ADMIN_CHANGE_USER_ROLE);
+  const [updateSubscription, { loading: updatingSub }] = useMutation(ADMIN_UPDATE_SUBSCRIPTION);
   const [editingId, setEditingId]     = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState("TRAVELER");
   const [search, setSearch]           = useState("");
@@ -265,6 +266,32 @@ export function AdminUsers() {
                                 }}
                               >
                                 Revoke Host
+                              </button>
+                            )}
+                            {u.role === "TRAVELER" && (
+                              <button
+                                className="text-[10px] font-bold text-amber-600 hover:text-amber-800 border border-amber-200 hover:bg-amber-50 px-3 py-1 rounded-lg transition-colors disabled:opacity-40"
+                                disabled={updatingSub}
+                                title="Grant Premium AI access (30 requests/month)"
+                                onClick={async () => {
+                                  await updateSubscription({ variables: { targetFirebaseUid: u.firebaseUid, tier: "PREMIUM" } });
+                                  await refetch();
+                                }}
+                              >
+                                Grant Premium
+                              </button>
+                            )}
+                            {u.role === "TRAVELER" && (
+                              <button
+                                className="text-[10px] font-bold text-slate-400 hover:text-slate-600 border border-slate-200 hover:bg-slate-50 px-3 py-1 rounded-lg transition-colors disabled:opacity-40"
+                                disabled={updatingSub}
+                                title="Revert to Free tier (5 requests/month)"
+                                onClick={async () => {
+                                  await updateSubscription({ variables: { targetFirebaseUid: u.firebaseUid, tier: "FREE" } });
+                                  await refetch();
+                                }}
+                              >
+                                Revoke Premium
                               </button>
                             )}
                           </>

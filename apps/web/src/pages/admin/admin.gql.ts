@@ -31,12 +31,19 @@ export const ADMIN_ALL_USERS = gql`
   }
 `;
 
+
 export const ADMIN_CHANGE_USER_ROLE = gql`
   mutation AdminChangeUserRole($id: String!, $role: String!) {
     adminChangeUserRole(id: $id, role: $role) {
       id
       role
     }
+  }
+`;
+
+export const ADMIN_UPDATE_SUBSCRIPTION = gql`
+  mutation AdminUpdateSubscription($targetFirebaseUid: String!, $tier: String!) {
+    adminUpdateUserSubscription(targetFirebaseUid: $targetFirebaseUid, tier: $tier)
   }
 `;
 
