@@ -23,7 +23,6 @@ type Step =
   | "identity"
   | "banking"
   | "review"
-  | "traveler-success"
   | "host-submitted";
 
 const HOST_TYPE_OPTIONS = [
@@ -198,7 +197,6 @@ export function Register() {
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm]   = useState("");
-  const [role, setRole]         = useState<"TRAVELER" | "HOST">("TRAVELER");
   const [err, setErr]           = useState<string | null>(null);
   const [loading, setLoading]   = useState(false);
   const [step, setStep]         = useState<Step>("form");
@@ -219,24 +217,6 @@ export function Register() {
   const [bankDocFile, setBankDocFile]         = useState<File | null>(null);
 
   const [submitHostApplication] = useMutation(SUBMIT_HOST_APPLICATION);
-
-  // ── TRAVELER registration ─────────────────────────────────────────────────
-  async function onTravelerSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setErr(null);
-    if (password !== confirm) { setErr("Passwords do not match."); return; }
-    if (password.length < 6)  { setErr("Password must be at least 6 characters."); return; }
-    setLoading(true);
-    try {
-      const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
-      await sendEmailVerification(credential.user).catch(() => {});
-      setStep("traveler-success");
-    } catch (e: unknown) {
-      setErr((e as Error)?.message ?? "Registration failed.");
-    } finally {
-      setLoading(false);
-    }
-  }
 
   // ── HOST step navigation ──────────────────────────────────────────────────
   function goNextHostStep() {
@@ -313,28 +293,6 @@ export function Register() {
     }
   }
 
-
-  // ── Success screens ───────────────────────────────────────────────────────
-  if (step === "traveler-success") {
-    return (
-      <PageWrap>
-        <div className="rounded-2xl bg-white/95 p-10 shadow-2xl backdrop-blur-sm text-center">
-          <div className="text-5xl mb-4">🎉</div>
-          <h2 className="text-xl font-bold text-slate-700 mb-2">Registration Successful!</h2>
-          <p className="text-sm text-slate-500 leading-relaxed mb-6">Welcome to Ceylonify! Your Traveler account has been created.</p>
-          <div className="rounded-xl bg-sky-50 border border-sky-100 px-5 py-4 mb-3 text-left">
-            <div className="text-xs font-bold uppercase text-sky-600 mb-1">Next step</div>
-            <p className="text-sm text-sky-800">Download the <span className="font-bold">Ceylonify mobile app</span> to discover and book authentic Sri Lankan experiences.</p>
-          </div>
-          <div className="rounded-xl bg-emerald-50 border border-emerald-100 px-5 py-3 mb-6 text-left">
-            <div className="text-xs font-bold uppercase text-emerald-600 mb-1">Verify your email</div>
-            <p className="text-sm text-emerald-800">We sent a link to <span className="font-semibold">{email}</span>. Click it to verify.</p>
-          </div>
-          <p className="text-xs text-slate-400 mt-4">Already a host? <Link to="/login" className="font-bold text-sky-600 hover:underline">Sign in here</Link></p>
-        </div>
-      </PageWrap>
-    );
-  }
 
   if (step === "host-submitted") {
     return (
@@ -593,15 +551,17 @@ export function Register() {
     );
   }
 
-  // ── Step 1: credentials form (TRAVELER + HOST entry point) ────────────────
+  // ── Step 1: host credentials entry ───────────────────────────────────────
   return (
     <PageWrap>
       <div className="rounded-2xl bg-white/95 p-10 shadow-2xl backdrop-blur-sm">
-        <h1 className="text-2xl font-semibold text-neutral-900">Create account</h1>
-        <p className="mt-1 text-sm text-neutral-500">Join Ceylonify to discover or host experiences</p>
+        <h1 className="text-2xl font-semibold text-neutral-900">Apply as a Host</h1>
+        <p className="mt-1 text-sm text-neutral-500">
+          List and manage experiences on Ceylonify. Requires identity verification and admin approval.
+        </p>
 
         <form
-          onSubmit={role === "TRAVELER" ? onTravelerSubmit : (e) => {
+          onSubmit={(e) => {
             e.preventDefault();
             setErr(null);
             if (password !== confirm) { setErr("Passwords do not match."); return; }
@@ -610,46 +570,24 @@ export function Register() {
           }}
           className="mt-8 space-y-5"
         >
-          {/* Role selector */}
-          <div>
-            <div className="mb-2 text-xs font-bold uppercase text-slate-600">I am a…</div>
-            <div className="grid grid-cols-2 gap-3">
-              {(["TRAVELER", "HOST"] as const).map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => setRole(r)}
-                  className={`py-3 rounded-xl border-2 text-sm font-bold transition-colors ${
-                    role === r
-                      ? "border-brand-500 bg-brand-50 text-brand-700"
-                      : "border-slate-200 text-slate-500 hover:border-slate-300"
-                  }`}
-                >
-                  {r === "TRAVELER" ? "✈️ Traveler" : "🏡 Host"}
-                </button>
-              ))}
-            </div>
-            <p className="mt-2 text-xs text-slate-400">
-              {role === "TRAVELER"
-                ? "Discover experiences via the Ceylonify mobile app."
-                : "List and manage experiences. Requires identity verification and admin approval."}
-            </p>
-          </div>
-
-          <Input label="Email address" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
-          <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
-          <Input label="Confirm Password" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" />
+          <Input label="Email address" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" placeholder="example@email.com" />
+          <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" placeholder="••••••••" />
+          <Input label="Confirm Password" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" placeholder="••••••••" />
 
           {err && <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div>}
 
           <Button type="submit" disabled={loading} className="w-full">
-            {loading ? "Creating…" : role === "TRAVELER" ? "Create account" : "Continue →"}
+            {loading ? "Please wait…" : "Continue →"}
           </Button>
         </form>
 
         <p className="mt-6 text-center text-xs text-neutral-400">
           Already have an account?{" "}
           <Link to="/login" className="font-bold text-sky-600 hover:underline">Sign in</Link>
+        </p>
+        <p className="mt-2 text-center text-xs text-neutral-400">
+          Traveler? Download the{" "}
+          <span className="font-semibold text-neutral-500">Ceylonify mobile app</span> to get started.
         </p>
       </div>
     </PageWrap>

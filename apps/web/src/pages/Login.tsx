@@ -102,9 +102,9 @@ export function Login() {
         </form>
 
         <p className="mt-6 text-center text-xs text-neutral-400">
-          Don't have an account?{" "}
+          Want to become a host?{" "}
           <Link to="/register" className="font-bold text-sky-600 hover:underline">
-            Create one
+            Apply here
           </Link>
         </p>
 
