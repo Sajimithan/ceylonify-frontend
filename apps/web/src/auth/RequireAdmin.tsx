@@ -1,14 +1,24 @@
-import { Navigate } from "react-router-dom";
+import { useEffect } from "react";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useQuery } from "@apollo/client/react";
+import { signOut } from "firebase/auth";
+import { auth } from "./firebase";
 import { useAuth } from "./useAuth";
 import { ME_QUERY } from "../pages/browse.gql";
 
 export function RequireAdmin({ children }: { children: React.ReactNode }) {
+  const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
-  const { data, loading: meLoading } = useQuery(ME_QUERY, {
+  const { data, loading: meLoading, error: meError } = useQuery(ME_QUERY, {
     skip: !user,
-    fetchPolicy: "cache-first",
+    fetchPolicy: "network-only",
   });
+
+  useEffect(() => {
+    if (meError) {
+      signOut(auth).then(() => navigate("/", { replace: true }));
+    }
+  }, [meError, navigate]);
 
   if (authLoading || (user && meLoading)) {
     return (
@@ -18,7 +28,7 @@ export function RequireAdmin({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/" replace />;
 
   const role = data?.me?.role;
 

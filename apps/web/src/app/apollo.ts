@@ -1,5 +1,7 @@
 import { ApolloClient, InMemoryCache, createHttpLink } from "@apollo/client";
 import { setContext } from "@apollo/client/link/context";
+import { onError } from "@apollo/client/link/error";
+import { signOut } from "firebase/auth";
 import { auth } from "../auth/firebase";
 
 const httpLink = createHttpLink({
@@ -18,7 +20,16 @@ const authLink = setContext(async (_, { headers }) => {
   };
 });
 
+const errorLink = onError(({ graphQLErrors, networkError }) => {
+  const isAuthError =
+    graphQLErrors?.some((e) => e.extensions?.code === "UNAUTHENTICATED") ||
+    (networkError && "statusCode" in networkError && networkError.statusCode === 401);
+  if (isAuthError) {
+    signOut(auth).then(() => { window.location.href = "/"; });
+  }
+});
+
 export const apolloClient = new ApolloClient({
-  link: authLink.concat(httpLink),
+  link: errorLink.concat(authLink).concat(httpLink),
   cache: new InMemoryCache(),
 });

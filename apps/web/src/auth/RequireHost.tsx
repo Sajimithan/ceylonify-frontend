@@ -1,4 +1,5 @@
-import { Navigate } from "react-router-dom";
+import { useEffect } from "react";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useQuery } from "@apollo/client/react";
 import { signOut } from "firebase/auth";
 import { auth } from "./firebase";
@@ -8,7 +9,7 @@ import { ME_QUERY } from "../pages/browse.gql";
 function TravelerGate() {
   async function logout() {
     await signOut(auth);
-    window.location.href = "/login";
+    window.location.href = "/";
   }
 
   return (
@@ -39,11 +40,18 @@ function TravelerGate() {
 }
 
 export function RequireHost({ children }: { children: React.ReactNode }) {
+  const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
-  const { data, loading: meLoading } = useQuery(ME_QUERY, {
+  const { data, loading: meLoading, error: meError } = useQuery(ME_QUERY, {
     skip: !user,
-    fetchPolicy: "cache-first",
+    fetchPolicy: "network-only",
   });
+
+  useEffect(() => {
+    if (meError) {
+      signOut(auth).then(() => navigate("/", { replace: true }));
+    }
+  }, [meError, navigate]);
 
   if (authLoading || (user && meLoading)) {
     return (
@@ -53,12 +61,11 @@ export function RequireHost({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/" replace />;
 
   const role = data?.me?.role;
 
   if (!role) {
-    // me query pending or failed — wait
     return (
       <div className="flex min-h-screen items-center justify-center text-slate-400 text-sm font-semibold">
         Verifying access…
