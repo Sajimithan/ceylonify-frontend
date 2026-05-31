@@ -6,6 +6,7 @@ import { MAPS_LIBRARIES } from "../lib/googleMaps";
 import { DashboardLayout } from "../layouts/DashboardLayout";
 import { Badge } from "../ui/Badge";
 import { ME_QUERY, SEARCH_LISTINGS, NEARBY_LISTINGS_QUERY } from "./browse.gql";
+import { useFeatureFlags } from "../auth/useFeatureFlags";
 import { MY_SAVED_LISTINGS, SAVE_LISTING, UNSAVE_LISTING } from "./host/saved.gql";
 
 type Listing = {
@@ -53,6 +54,10 @@ export function Browse() {
 
   const { data: meData } = useQuery(ME_QUERY);
   const { data: savedData, refetch: refetchSaved } = useQuery(MY_SAVED_LISTINGS);
+  const { isEnabledFor } = useFeatureFlags();
+  const userRole: "TRAVELER" | "HOST" = meData?.me?.role === "HOST" ? "HOST" : "TRAVELER";
+  const nearMeEnabled = isEnabledFor("NEAR_ME_SEARCH", userRole);
+  const mapViewEnabled = isEnabledFor("MAP_VIEW", userRole);
   const [saveListing] = useMutation(SAVE_LISTING);
   const [unsaveListing] = useMutation(UNSAVE_LISTING);
 
@@ -85,6 +90,11 @@ export function Browse() {
     },
     [search, debouncedQ, category, type, offset, startAfter, startBefore]
   );
+
+  // If map view is disabled by admin while user is in map mode, switch back to grid
+  useEffect(() => {
+    if (!mapViewEnabled && viewMode === "map") setViewMode("grid");
+  }, [mapViewEnabled, viewMode]);
 
   // Debounce search input
   useEffect(() => {
@@ -250,27 +260,31 @@ export function Browse() {
               Clear dates
             </button>
           )}
-          <button
-            onClick={handleNearMe}
-            disabled={nearMeLoading}
-            className="px-3 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-bold rounded shadow text-xs transition-colors whitespace-nowrap"
-          >
-            {nearMeLoading ? "Locating…" : "📍 Near Me"}
-          </button>
-          <div className="ml-auto flex items-center gap-1 bg-white rounded shadow px-1 py-1">
+          {nearMeEnabled && (
             <button
-              onClick={() => setViewMode("grid")}
-              className={`px-3 py-1 rounded text-xs font-bold transition-colors ${viewMode === "grid" ? "bg-sky-500 text-white" : "text-slate-500 hover:text-slate-700"}`}
+              onClick={handleNearMe}
+              disabled={nearMeLoading}
+              className="px-3 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-bold rounded shadow text-xs transition-colors whitespace-nowrap"
             >
-              ⊞ Grid
+              {nearMeLoading ? "Locating…" : "📍 Near Me"}
             </button>
-            <button
-              onClick={() => setViewMode("map")}
-              className={`px-3 py-1 rounded text-xs font-bold transition-colors ${viewMode === "map" ? "bg-sky-500 text-white" : "text-slate-500 hover:text-slate-700"}`}
-            >
-              🗺 Map
-            </button>
-          </div>
+          )}
+          {mapViewEnabled && (
+            <div className="ml-auto flex items-center gap-1 bg-white rounded shadow px-1 py-1">
+              <button
+                onClick={() => setViewMode("grid")}
+                className={`px-3 py-1 rounded text-xs font-bold transition-colors ${viewMode === "grid" ? "bg-sky-500 text-white" : "text-slate-500 hover:text-slate-700"}`}
+              >
+                ⊞ Grid
+              </button>
+              <button
+                onClick={() => setViewMode("map")}
+                className={`px-3 py-1 rounded text-xs font-bold transition-colors ${viewMode === "map" ? "bg-sky-500 text-white" : "text-slate-500 hover:text-slate-700"}`}
+              >
+                🗺 Map
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Near Me error */}

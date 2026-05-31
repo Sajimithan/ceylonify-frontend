@@ -15,12 +15,27 @@ import { Button } from "../../ui/Button";
 import { Card } from "../../ui/Card";
 import { DashboardLayout } from "../../layouts/DashboardLayout";
 import { useNavigate, useParams } from "react-router-dom";
+import { useFeatureFlags } from "../../auth/useFeatureFlags";
 
 type ListingType = "EVENT" | "RENTAL" | "ACCOMMODATION" | "ACTIVITY";
 type ListingCategory = "NATURE" | "CULTURE" | "ADVENTURE" | "FOOD" | "WELLNESS" | "BEACH" | "HERITAGE";
 
 export function EditListing() {
   const { id } = useParams<{ id: string }>();
+  const { isEnabledFor } = useFeatureFlags();
+  if (!isEnabledFor("HOST_LISTING_CREATION", "HOST")) {
+    return (
+      <DashboardLayout title="Edit Listing">
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <div className="text-5xl mb-4">🔒</div>
+          <h2 className="text-xl font-bold text-slate-700 mb-2">Feature Disabled</h2>
+          <p className="text-slate-400 text-sm max-w-sm">
+            Listing management has been temporarily disabled by the admin. Please check back later.
+          </p>
+        </div>
+      </DashboardLayout>
+    );
+  }
   const nav = useNavigate();
 
   const { data: initialData, loading: fetching } = useQuery(GET_LISTING, {

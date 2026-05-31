@@ -8,6 +8,7 @@ import { Button } from '../../ui/Button';
 import { DashboardLayout } from '../../layouts/DashboardLayout';
 import { getFcmToken, listenForegroundMessages } from '../../notifications/fcm';
 import { useEffect, useState } from 'react';
+import { useFeatureFlags } from '../../auth/useFeatureFlags';
 import { ShareIcon, XMarkIcon, ClipboardDocumentIcon, CheckIcon } from '@heroicons/react/24/outline';
 
 type Listing = {
@@ -193,6 +194,8 @@ function ShareModal({
 export function MyListings() {
   const { data, loading, error, refetch } = useQuery<MyListingsData>(MY_LISTINGS);
   const [registerToken] = useMutation(REGISTER_DEVICE_TOKEN);
+  const { isEnabledFor } = useFeatureFlags();
+  const canCreateListing = isEnabledFor("HOST_LISTING_CREATION", "HOST");
   const [deleteListing] = useMutation(DELETE_LISTING, {
     onCompleted: () => refetch()
   });
@@ -239,9 +242,11 @@ export function MyListings() {
           <Button variant="ghost" className="text-white" onClick={() => refetch()}>
             Refresh
           </Button>
-          <Link to="/host/create">
-            <Button variant="secondary">Create Listing</Button>
-          </Link>
+          {canCreateListing && (
+            <Link to="/host/create">
+              <Button variant="secondary">Create Listing</Button>
+            </Link>
+          )}
         </>
       }
     >
@@ -265,9 +270,11 @@ export function MyListings() {
         {!loading && listings.length === 0 ? (
           <Card className="text-center py-10">
             <div className="text-lg text-slate-500 font-bold mb-4">No listings found.</div>
-            <Link to="/host/create">
-              <Button>Create your first listing</Button>
-            </Link>
+            {canCreateListing && (
+              <Link to="/host/create">
+                <Button>Create your first listing</Button>
+              </Link>
+            )}
           </Card>
         ) : null}
 

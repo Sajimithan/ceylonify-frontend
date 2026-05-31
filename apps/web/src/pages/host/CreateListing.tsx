@@ -16,6 +16,7 @@ import { Button } from "../../ui/Button";
 import { Card } from "../../ui/Card";
 import { DashboardLayout } from "../../layouts/DashboardLayout";
 import { useNavigate } from "react-router-dom";
+import { useFeatureFlags } from "../../auth/useFeatureFlags";
 
 const ENHANCE_DESCRIPTION = gql`
   mutation EnhanceDescription($text: String!) {
@@ -53,6 +54,7 @@ function loadTemplates(): ListingTemplate[] {
 
 export function CreateListing() {
   const nav = useNavigate();
+  const { isEnabledFor } = useFeatureFlags();
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -195,6 +197,20 @@ export function CreateListing() {
       const error = e as Error;
       setErr(error?.message ?? "Failed to create listing");
     }
+  }
+
+  if (!isEnabledFor("HOST_LISTING_CREATION", "HOST")) {
+    return (
+      <DashboardLayout title="Create Listing" subtitle="New experience">
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <div className="text-5xl mb-4">🔒</div>
+          <h2 className="text-xl font-bold text-slate-700 mb-2">Feature Disabled</h2>
+          <p className="text-slate-400 text-sm max-w-sm">
+            Listing creation has been temporarily disabled by the admin. Please check back later.
+          </p>
+        </div>
+      </DashboardLayout>
+    );
   }
 
   return (

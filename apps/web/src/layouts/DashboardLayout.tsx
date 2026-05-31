@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useFeatureFlags } from "../auth/useFeatureFlags";
 import { Link, useLocation } from "react-router-dom";
 import { auth } from "../auth/firebase";
 import { signOut } from "firebase/auth";
@@ -93,6 +94,7 @@ export function DashboardLayout({
 }) {
   const { user } = useAuth();
   const isAdmin = isAdminEmail(user?.email);
+  const { isEnabledFor } = useFeatureFlags();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   async function logout() {
@@ -162,7 +164,9 @@ export function DashboardLayout({
             <ul className="space-y-0.5">
               <NavLink to="/browse" onNav={closeSidebar}>Browse Experiences</NavLink>
               <NavLink to="/saved" onNav={closeSidebar}>Saved Listings</NavLink>
-              <NavLink to="/ai-planner" onNav={closeSidebar}>AI Travel Planner</NavLink>
+              {isEnabledFor("AI_TRIP_PLANNER", "HOST") && (
+                <NavLink to="/ai-planner" onNav={closeSidebar}>AI Travel Planner</NavLink>
+              )}
             </ul>
           </div>
 
@@ -172,7 +176,9 @@ export function DashboardLayout({
             </p>
             <ul className="space-y-0.5">
               <NavLink to="/dashboard" onNav={closeSidebar}>My Listings</NavLink>
-              <NavLink to="/host/create" onNav={closeSidebar}>Create Listing</NavLink>
+              {isEnabledFor("HOST_LISTING_CREATION", "HOST") && (
+                <NavLink to="/host/create" onNav={closeSidebar}>Create Listing</NavLink>
+              )}
               <NavLink to="/host/analytics" onNav={closeSidebar}>Analytics</NavLink>
               {!isAdmin && (
                 <NavLink to="/host/profile" onNav={closeSidebar}>Profile & Settings</NavLink>
