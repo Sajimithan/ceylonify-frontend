@@ -14,6 +14,12 @@ export const ME_VERIFICATION_STATUS = gql`
   }
 `;
 
+export const SEND_EMAIL_VERIFICATION = gql`
+  mutation SendEmailVerification {
+    sendEmailVerification
+  }
+`;
+
 export const MARK_EMAIL_VERIFIED = gql`
   mutation MarkEmailVerified {
     markEmailVerified
