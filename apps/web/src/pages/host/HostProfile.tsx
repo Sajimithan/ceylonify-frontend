@@ -146,7 +146,9 @@ export function HostProfile() {
     setNameLoading(true);
     setNameMsg(null);
     try {
-      await updateProfile(user, { displayName: displayName.trim() || null });
+      const name = displayName.trim() || null;
+      await updateProfile(user, { displayName: name });
+      await updateProfileMutation({ variables: { displayName: name } });
       setNameMsg({ ok: true, text: "Display name updated." });
     } catch {
       setNameMsg({ ok: false, text: "Failed to update display name." });
