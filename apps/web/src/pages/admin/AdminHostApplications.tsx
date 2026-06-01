@@ -256,7 +256,7 @@ export function AdminHostApplications() {
     ADMIN_PENDING_HOST_APPLICATIONS,
     { fetchPolicy: "network-only" }
   );
-  useSmartPoll(startPolling, stopPolling, 20_000);
+  useSmartPoll(startPolling, stopPolling, 10_000);
 
   const [reviewApplication, { loading: reviewing }] = useMutation(ADMIN_REVIEW_HOST_APPLICATION);
   const [actionError, setActionError] = useState<string | null>(null);

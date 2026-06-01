@@ -369,7 +369,7 @@ export function AdminPendingListings() {
     PENDING_LISTINGS,
     { fetchPolicy: "network-only" }
   );
-  useSmartPoll(startPolling, stopPolling, 20_000);
+  useSmartPoll(startPolling, stopPolling, 10_000);
   const { data: usersData } = useQuery<{ adminAllUsers: UserRecord[] }>(ADMIN_ALL_USERS);
   const listings = useMemo(() => data?.pendingListings ?? [], [data]);
   const users = useMemo(() => usersData?.adminAllUsers ?? [], [usersData]);

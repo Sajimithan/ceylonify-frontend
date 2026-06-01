@@ -197,7 +197,7 @@ export function MyListings() {
   const { data, loading, error, refetch, startPolling, stopPolling } = useQuery<MyListingsData>(MY_LISTINGS, {
     fetchPolicy: "network-only",
   });
-  useSmartPoll(startPolling, stopPolling, 20_000);
+  useSmartPoll(startPolling, stopPolling, 10_000);
   const { isEnabledFor } = useFeatureFlags();
   const canCreateListing = isEnabledFor("HOST_LISTING_CREATION", "HOST");
   const [deleteListing] = useMutation(DELETE_LISTING, {

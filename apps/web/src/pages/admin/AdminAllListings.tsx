@@ -331,7 +331,7 @@ export function AdminAllListings() {
   const { data, loading, error, refetch, startPolling, stopPolling } = useQuery<{ adminAllListings: Listing[] }>(ADMIN_ALL_LISTINGS, {
     fetchPolicy: "network-only",
   });
-  useSmartPoll(startPolling, stopPolling, 30_000);
+  useSmartPoll(startPolling, stopPolling, 15_000);
   const { data: usersData } = useQuery<{ adminAllUsers: UserRecord[] }>(ADMIN_ALL_USERS);
 
   const [filter, setFilter] = useState<FilterStatus>("ALL");

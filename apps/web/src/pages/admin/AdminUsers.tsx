@@ -61,7 +61,7 @@ export function AdminUsers() {
   const { data, loading, error, refetch, startPolling, stopPolling } = useQuery<UsersData>(ADMIN_ALL_USERS, {
     fetchPolicy: "network-only",
   });
-  useSmartPoll(startPolling, stopPolling, 60_000);
+  useSmartPoll(startPolling, stopPolling, 30_000);
   const { data: appsData } = useQuery<{ adminPendingHostApplications: { firebaseUid: string }[] }>(
     ADMIN_PENDING_HOST_APPLICATIONS,
     { fetchPolicy: "network-only" },

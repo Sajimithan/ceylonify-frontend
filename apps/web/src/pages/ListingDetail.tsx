@@ -179,7 +179,7 @@ export function ListingDetail() {
     skip: !id,
     fetchPolicy: "network-only",
   });
-  useSmartPoll(startPolling, stopPolling, 30_000);
+  useSmartPoll(startPolling, stopPolling, 15_000);
   const { data: meData } = useQuery(ME_QUERY);
   const { data: relatedData } = useQuery(RELATED_LISTINGS_QUERY, {
     variables: { listingId: id },

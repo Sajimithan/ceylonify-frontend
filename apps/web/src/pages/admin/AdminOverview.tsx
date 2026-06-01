@@ -44,7 +44,7 @@ export function AdminOverview() {
   const { data, loading, error, refetch, startPolling, stopPolling } = useQuery<StatsData>(ADMIN_STATS, {
     fetchPolicy: "network-only",
   });
-  useSmartPoll(startPolling, stopPolling, 30_000);
+  useSmartPoll(startPolling, stopPolling, 15_000);
 
   const listingChartData = data
     ? [
