@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@apollo/client/react";
 import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
+import { ConfirmModal } from "../../ui/ConfirmModal";
+import { useSmartPoll } from "../../hooks/useSmartPoll";
 import { DashboardLayout } from "../../layouts/DashboardLayout";
 import { Button } from "../../ui/Button";
 import { ADMIN_ALL_USERS, ADMIN_CHANGE_USER_ROLE, ADMIN_UPDATE_SUBSCRIPTION, ADMIN_UPDATE_USER_PHONE, ADMIN_SUSPEND_USER, ADMIN_ACTIVATE_USER, ADMIN_CREATE_ADMIN_ACCOUNT, ADMIN_DELETE_USER } from "./admin.gql";
@@ -19,6 +21,7 @@ type UserRecord = {
   phone?: string;
   isSuspended?: boolean;
   subscriptionExpiresAt?: string;
+  avatarUrl?: string;
 };
 
 const BADGE_EMOJI: Record<string, string> = {
@@ -55,9 +58,10 @@ export function AdminUsers() {
   const { data: meData } = useQuery(ME_QUERY);
   const isSuperAdmin: boolean = meData?.me?.isSuperAdmin ?? false;
 
-  const { data, loading, error, refetch } = useQuery<UsersData>(ADMIN_ALL_USERS, {
+  const { data, loading, error, refetch, startPolling, stopPolling } = useQuery<UsersData>(ADMIN_ALL_USERS, {
     fetchPolicy: "network-only",
   });
+  useSmartPoll(startPolling, stopPolling, 30_000);
   const { data: appsData } = useQuery<{ adminPendingHostApplications: { firebaseUid: string }[] }>(
     ADMIN_PENDING_HOST_APPLICATIONS,
     { fetchPolicy: "network-only" },
@@ -66,10 +70,8 @@ export function AdminUsers() {
 
   const [showRegisterPanel, setShowRegisterPanel] = useState(false);
   const [adminEmail, setAdminEmail] = useState("");
-  const [adminPassword, setAdminPassword] = useState("");
   const [registerStatus, setRegisterStatus] = useState<"idle" | "success" | "error">("idle");
   const [registerError, setRegisterError] = useState("");
-  const [copied, setCopied] = useState(false);
 
   const [createAdminAccount, { loading: creating }] = useMutation(ADMIN_CREATE_ADMIN_ACCOUNT);
   const [changeRole, { loading: updating }] = useMutation(ADMIN_CHANGE_USER_ROLE);
@@ -83,6 +85,7 @@ export function AdminUsers() {
   const [search, setSearch]           = useState("");
   const [editingPhoneUid, setEditingPhoneUid] = useState<string | null>(null);
   const [phoneInput, setPhoneInput]   = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<UserRecord | null>(null);
 
   const isPremiumUser = (u: { subscriptionExpiresAt?: string | null }) =>
     !!u.subscriptionExpiresAt && new Date(u.subscriptionExpiresAt) > new Date();
@@ -110,34 +113,19 @@ export function AdminUsers() {
     }
   }
 
-  function generatePassword() {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789@#$!";
-    const bytes = crypto.getRandomValues(new Uint8Array(12));
-    setAdminPassword(Array.from(bytes).map((b) => chars[b % chars.length]).join(""));
-    setRegisterStatus("idle");
-    setRegisterError("");
-  }
-
   async function handleCreateAdmin() {
-    if (!adminEmail.trim() || !adminPassword) return;
+    if (!adminEmail.trim()) return;
     setRegisterStatus("idle");
     setRegisterError("");
     try {
       const createdEmail = adminEmail.trim();
-      await createAdminAccount({ variables: { email: createdEmail, password: adminPassword } });
+      await createAdminAccount({ variables: { email: createdEmail } });
       setRegisterStatus("success");
-      setAdminPassword("");
       await refetch();
     } catch (e: unknown) {
       setRegisterStatus("error");
       setRegisterError((e as Error)?.message ?? "Failed to create admin account.");
     }
-  }
-
-  async function copyPassword() {
-    await navigator.clipboard.writeText(adminPassword);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   }
 
   const filteredUsers = (data?.adminAllUsers ?? []).filter(
@@ -179,7 +167,7 @@ export function AdminUsers() {
         {/* Register Admin Panel */}
         <div className="bg-white rounded-xl shadow mb-4 overflow-hidden">
           <button
-            onClick={() => { setShowRegisterPanel(!showRegisterPanel); setRegisterStatus("idle"); setRegisterError(""); setAdminEmail(""); setAdminPassword(""); }}
+            onClick={() => { setShowRegisterPanel(!showRegisterPanel); setRegisterStatus("idle"); setRegisterError(""); setAdminEmail(""); }}
             className="w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-slate-50 transition-colors"
           >
             <span className="text-sm font-bold text-slate-700">+ Register New Admin</span>
@@ -198,37 +186,6 @@ export function AdminUsers() {
                   placeholder="admin@example.com"
                   className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-700 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-brand-400"
                 />
-              </div>
-
-              {/* Generate Password */}
-              <div>
-                <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5">Password</label>
-                <div className="flex gap-2">
-                  {adminPassword ? (
-                    <div className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5">
-                      <code className="flex-1 text-sm font-mono text-brand-700 tracking-wider">{adminPassword}</code>
-                      <button
-                        type="button"
-                        onClick={copyPassword}
-                        className="text-[11px] font-bold text-slate-400 hover:text-brand-600 transition-colors flex-shrink-0"
-                        title="Copy password"
-                      >
-                        {copied ? "✓ Copied" : "Copy"}
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex-1 border border-dashed border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-300">
-                      Click generate to create a secure password
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={generatePassword}
-                    className="flex-shrink-0 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs rounded-lg transition-colors"
-                  >
-                    Generate
-                  </button>
-                </div>
               </div>
 
               {/* Status messages */}
@@ -252,7 +209,7 @@ export function AdminUsers() {
               <button
                 type="button"
                 onClick={handleCreateAdmin}
-                disabled={creating || !adminEmail.trim() || !adminPassword}
+                disabled={creating || !adminEmail.trim()}
                 className="w-full py-2.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-sm rounded-lg transition-colors"
               >
                 {creating ? "Sending…" : "Create and Send Mail"}
@@ -313,11 +270,19 @@ export function AdminUsers() {
                     {/* User cell */}
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-3">
-                        <div
-                          className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${userAvatarColor(u.role)}`}
-                        >
-                          {userInitials(u.email)}
-                        </div>
+                        {u.avatarUrl ? (
+                          <img
+                            src={u.avatarUrl}
+                            alt=""
+                            className="w-8 h-8 rounded-full object-cover flex-shrink-0 ring-1 ring-slate-200"
+                          />
+                        ) : (
+                          <div
+                            className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${userAvatarColor(u.role)}`}
+                          >
+                            {userInitials(u.email)}
+                          </div>
+                        )}
                         <div>
                           <div className="flex items-center gap-1.5">
                             <div
@@ -528,15 +493,7 @@ export function AdminUsers() {
                               <button
                                 className="text-[10px] font-bold text-red-700 hover:text-red-900 border border-red-300 hover:bg-red-50 px-3 py-1 rounded-lg transition-colors"
                                 title="Permanently delete this account"
-                                onClick={async () => {
-                                  if (!confirm(`Permanently delete account for ${u.email ?? u.firebaseUid}? This cannot be undone.`)) return;
-                                  try {
-                                    await deleteUser({ variables: { firebaseUid: u.firebaseUid } });
-                                    await refetch();
-                                  } catch (e) {
-                                    alert((e as Error)?.message ?? "Failed to delete user.");
-                                  }
-                                }}
+                                onClick={() => { setDeleteTarget(u); setDeleteError(""); }}
                               >
                                 Delete
                               </button>
@@ -562,6 +519,21 @@ export function AdminUsers() {
           </div>
         )}
       </div>
+
+      {deleteTarget && (
+        <ConfirmModal
+          title="Delete Account"
+          description="This action is permanent and cannot be undone."
+          detail={`${deleteTarget.email ?? deleteTarget.firebaseUid} · ${deleteTarget.role}`}
+          confirmLabel="Delete Permanently"
+          onConfirm={async () => {
+            await deleteUser({ variables: { firebaseUid: deleteTarget.firebaseUid } });
+            setDeleteTarget(null);
+            await refetch();
+          }}
+          onCancel={() => setDeleteTarget(null)}
+        />
+      )}
     </DashboardLayout>
   );
 }

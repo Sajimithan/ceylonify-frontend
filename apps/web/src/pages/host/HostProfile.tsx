@@ -8,14 +8,23 @@ import {
   reauthenticateWithCredential,
   signOut,
 } from "firebase/auth";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { auth, storage } from "../../auth/firebase";
+import { auth } from "../../auth/firebase";
 import { useAuth } from "../../auth/useAuth";
 import { DELETE_MY_ACCOUNT } from "../premium.gql";
 import { DashboardLayout } from "../../layouts/DashboardLayout";
 import { Input } from "../../ui/Input";
 import { Button } from "../../ui/Button";
+import { ConfirmModal } from "../../ui/ConfirmModal";
 import { ME_QUERY } from "../browse.gql";
+
+const UPDATE_PROFILE = gql`
+  mutation UpdateProfile($displayName: String, $avatarUrl: String) {
+    updateProfile(displayName: $displayName, avatarUrl: $avatarUrl) {
+      firebaseUid
+      avatarUrl
+    }
+  }
+`;
 
 const HOST_BADGE = gql`
   query HostBadge($firebaseUid: String!) {
@@ -75,14 +84,8 @@ export function HostProfile() {
     skip: !user?.uid,
   });
   const [deleteMyAccount] = useMutation(DELETE_MY_ACCOUNT);
-
-  async function handleDeleteAccount() {
-    if (!confirm("Are you sure you want to permanently delete your account and all your listings?")) return;
-    if (!confirm("This action cannot be undone. Confirm?")) return;
-    await deleteMyAccount();
-    await signOut(auth);
-    window.location.href = "/login";
-  }
+  const [updateProfileMutation] = useMutation(UPDATE_PROFILE);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // ── Profile photo ─────────────────────────────────────────────────────────
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -106,11 +109,15 @@ export function HostProfile() {
     setPhotoUploading(true);
     setPhotoMsg(null);
     try {
-      const storageRef = ref(storage, `profile-pictures/${user.uid}`);
-      await uploadBytes(storageRef, file);
-      const downloadURL = await getDownloadURL(storageRef);
-      await updateProfile(user, { photoURL: downloadURL });
-      setLocalPhotoURL(downloadURL);
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("http://localhost:3000/upload", { method: "POST", body: formData });
+      if (!res.ok) throw new Error("Upload failed");
+      const { url } = await res.json() as { url: string };
+      const fullUrl = `http://localhost:3000${url}`;
+      await updateProfile(user, { photoURL: fullUrl });
+      await updateProfileMutation({ variables: { avatarUrl: fullUrl } });
+      setLocalPhotoURL(fullUrl);
       setPhotoMsg({ ok: true, text: "Profile photo updated." });
     } catch {
       setPhotoMsg({ ok: false, text: "Upload failed. Please try again." });
@@ -133,7 +140,9 @@ export function HostProfile() {
     setNameLoading(true);
     setNameMsg(null);
     try {
-      await updateProfile(user, { displayName: displayName.trim() || null });
+      const name = displayName.trim() || null;
+      await updateProfile(user, { displayName: name });
+      await updateProfileMutation({ variables: { displayName: name } });
       setNameMsg({ ok: true, text: "Display name updated." });
     } catch {
       setNameMsg({ ok: false, text: "Failed to update display name." });
@@ -393,13 +402,27 @@ export function HostProfile() {
             Permanently delete your account and all your listings. This action cannot be undone.
           </div>
           <button
-            onClick={handleDeleteAccount}
+            onClick={() => setShowDeleteModal(true)}
             className="px-5 py-2 rounded-lg border border-red-300 text-red-600 font-bold text-sm hover:bg-red-50 transition-colors"
           >
             Delete Account
           </button>
         </div>
       </div>
+
+      {showDeleteModal && (
+        <ConfirmModal
+          title="Delete Account"
+          description="Your account and all your listings will be permanently deleted. This cannot be undone."
+          confirmLabel="Delete My Account"
+          onConfirm={async () => {
+            await deleteMyAccount();
+            await signOut(auth);
+            window.location.href = "/";
+          }}
+          onCancel={() => setShowDeleteModal(false)}
+        />
+      )}
     </DashboardLayout>
   );
 }

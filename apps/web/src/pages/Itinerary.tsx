@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@apollo/client/react";
 import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "../layouts/DashboardLayout";
 import { Button } from "../ui/Button";
+import { ConfirmModal } from "../ui/ConfirmModal";
 import { MY_FULL_ITINERARY, UPDATE_ITINERARY_NOTE, REMOVE_FROM_ITINERARY } from "./itinerary.gql";
 import { PencilSquareIcon, TrashIcon, CheckIcon, XMarkIcon } from "@heroicons/react/24/outline";
 
@@ -83,6 +84,7 @@ export function Itinerary() {
   const [updateNote] = useMutation(UPDATE_ITINERARY_NOTE);
   const [removeItem] = useMutation(REMOVE_FROM_ITINERARY);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<ItineraryItem | null>(null);
 
   const items: ItineraryItem[] = data?.myItinerary ?? [];
   const grouped = groupByDay(items);
@@ -93,11 +95,6 @@ export function Itinerary() {
     refetch();
   }
 
-  async function handleRemove(itemId: string) {
-    if (!confirm("Remove this item from your itinerary?")) return;
-    await removeItem({ variables: { itemId } });
-    refetch();
-  }
 
   const TYPE_ICON: Record<string, string> = {
     EVENT: "🎪", RENTAL: "🚗", ACCOMMODATION: "🏠", ACTIVITY: "🏄",
@@ -209,7 +206,7 @@ export function Itinerary() {
                             <PencilSquareIcon className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            onClick={() => handleRemove(item.id)}
+                            onClick={() => setRemoveTarget(item)}
                             className="p-1 rounded text-slate-300 hover:text-red-500 transition-colors"
                             title="Remove"
                           >
@@ -225,6 +222,21 @@ export function Itinerary() {
           ))}
         </div>
       </div>
+
+      {removeTarget && (
+        <ConfirmModal
+          title="Remove from Itinerary"
+          description="This item will be removed from your trip plan."
+          detail={removeTarget.listingTitle ?? undefined}
+          confirmLabel="Remove"
+          onConfirm={async () => {
+            await removeItem({ variables: { itemId: removeTarget.id } });
+            setRemoveTarget(null);
+            refetch();
+          }}
+          onCancel={() => setRemoveTarget(null)}
+        />
+      )}
     </DashboardLayout>
   );
 }

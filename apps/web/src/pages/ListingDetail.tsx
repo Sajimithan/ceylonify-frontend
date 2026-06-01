@@ -3,6 +3,7 @@ import { GoogleMap, Marker, InfoWindow, useJsApiLoader } from "@react-google-map
 import { MAPS_LIBRARIES } from "../lib/googleMaps";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation } from "@apollo/client/react";
+import { useSmartPoll } from "../hooks/useSmartPoll";
 import { DashboardLayout } from "../layouts/DashboardLayout";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
@@ -173,10 +174,12 @@ export function ListingDetail() {
   const { id } = useParams<{ id: string }>();
   const nav = useNavigate();
 
-  const { data: listingData, loading } = useQuery(GET_LISTING_DETAIL, {
+  const { data: listingData, loading, startPolling, stopPolling } = useQuery(GET_LISTING_DETAIL, {
     variables: { id },
     skip: !id,
+    fetchPolicy: "network-only",
   });
+  useSmartPoll(startPolling, stopPolling, 15_000);
   const { data: meData } = useQuery(ME_QUERY);
   const { data: relatedData } = useQuery(RELATED_LISTINGS_QUERY, {
     variables: { listingId: id },

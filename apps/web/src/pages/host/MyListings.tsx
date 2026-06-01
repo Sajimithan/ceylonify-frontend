@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from '@apollo/client/react';
+import { useSmartPoll } from '../../hooks/useSmartPoll';
 import { Link } from 'react-router-dom';
 import { MY_LISTINGS, DELETE_LISTING, UPDATE_LISTING } from './listings.gql';
 import { Card } from '../../ui/Card';
@@ -9,6 +10,7 @@ import { listenForegroundMessages } from '../../notifications/fcm';
 import { useEffect, useState } from 'react';
 import { useFeatureFlags } from '../../auth/useFeatureFlags';
 import { ShareIcon, XMarkIcon, ClipboardDocumentIcon, CheckIcon } from '@heroicons/react/24/outline';
+import { ConfirmModal } from '../../ui/ConfirmModal';
 
 type Listing = {
   id: string;
@@ -192,7 +194,10 @@ function ShareModal({
 }
 
 export function MyListings() {
-  const { data, loading, error, refetch } = useQuery<MyListingsData>(MY_LISTINGS);
+  const { data, loading, error, refetch, startPolling, stopPolling } = useQuery<MyListingsData>(MY_LISTINGS, {
+    fetchPolicy: "network-only",
+  });
+  useSmartPoll(startPolling, stopPolling, 10_000);
   const { isEnabledFor } = useFeatureFlags();
   const canCreateListing = isEnabledFor("HOST_LISTING_CREATION", "HOST");
   const [deleteListing] = useMutation(DELETE_LISTING, {
@@ -202,16 +207,12 @@ export function MyListings() {
     onCompleted: () => refetch()
   });
   const [sharingListing, setSharingListing] = useState<Listing | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Listing | null>(null);
 
   useEffect(() => {
     listenForegroundMessages();
   }, []);
 
-  async function handleDelete(id: string) {
-    if (confirm("Are you sure you want to delete this listing?")) {
-      await deleteListing({ variables: { id } });
-    }
-  }
 
   async function handleResubmit(l: Listing) {
     if (!confirm("Resubmit this listing for review?")) return;
@@ -352,7 +353,7 @@ export function MyListings() {
                   <Button
                     variant="danger"
                     className="!px-3 !py-1 !text-[10px]"
-                    onClick={() => handleDelete(l.id)}
+                    onClick={() => setDeleteTarget(l)}
                   >
                     Delete
                   </Button>
@@ -381,6 +382,19 @@ export function MyListings() {
         <ShareModal
           listing={sharingListing}
           onClose={() => setSharingListing(null)}
+        />
+      )}
+      {deleteTarget && (
+        <ConfirmModal
+          title="Delete Listing"
+          description="This listing will be permanently deleted and cannot be recovered."
+          detail={deleteTarget.title}
+          confirmLabel="Delete Listing"
+          onConfirm={async () => {
+            await deleteListing({ variables: { id: deleteTarget.id } });
+            setDeleteTarget(null);
+          }}
+          onCancel={() => setDeleteTarget(null)}
         />
       )}
     </DashboardLayout>

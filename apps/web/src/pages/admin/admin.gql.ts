@@ -18,8 +18,8 @@ export const ADMIN_STATS = gql`
 `;
 
 export const ADMIN_CREATE_ADMIN_ACCOUNT = gql`
-  mutation AdminCreateAdminAccount($email: String!, $password: String!) {
-    adminCreateAdminAccount(email: $email, password: $password)
+  mutation AdminCreateAdminAccount($email: String!) {
+    adminCreateAdminAccount(email: $email)
   }
 `;
 
@@ -42,6 +42,7 @@ export const ADMIN_ALL_USERS = gql`
       phone
       isSuspended
       subscriptionExpiresAt
+      avatarUrl
     }
   }
 `;

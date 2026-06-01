@@ -8,6 +8,7 @@ import { storage } from "../auth/firebase";
 import { MY_EXPERIENCES, SHARE_EXPERIENCE, DELETE_MY_EXPERIENCE } from "./experiences.gql";
 import { SEARCH_LISTINGS } from "./browse.gql";
 import { TrashIcon, PencilSquareIcon, ShareIcon } from "@heroicons/react/24/outline";
+import { ConfirmModal } from "../ui/ConfirmModal";
 
 type Experience = {
   id: string;
@@ -249,14 +250,10 @@ export function Experienced() {
   const [showModal, setShowModal] = useState(false);
   const [editingExp, setEditingExp] = useState<Experience | undefined>();
   const [sharingListingId, setSharingListingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Experience | null>(null);
 
   const experiences: Experience[] = data?.myExperiences ?? [];
 
-  async function handleDelete(id: string) {
-    if (!confirm("Delete this experience?")) return;
-    await deleteExperience({ variables: { id } });
-    refetch();
-  }
 
   function handleSaved() {
     setShowModal(false);
@@ -317,7 +314,7 @@ export function Experienced() {
                     <ShareIcon className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => handleDelete(exp.id)}
+                    onClick={() => setDeleteTarget(exp)}
                     className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-slate-50 transition-colors"
                     title="Delete"
                   >
@@ -340,6 +337,20 @@ export function Experienced() {
           ))}
         </div>
       </div>
+      {deleteTarget && (
+        <ConfirmModal
+          title="Delete Experience"
+          description="This experience will be permanently deleted."
+          detail={deleteTarget.text.length > 80 ? deleteTarget.text.slice(0, 80) + "…" : deleteTarget.text}
+          confirmLabel="Delete"
+          onConfirm={async () => {
+            await deleteExperience({ variables: { id: deleteTarget.id } });
+            setDeleteTarget(null);
+            refetch();
+          }}
+          onCancel={() => setDeleteTarget(null)}
+        />
+      )}
     </DashboardLayout>
   );
 }
