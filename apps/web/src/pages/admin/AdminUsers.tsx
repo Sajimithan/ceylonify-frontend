@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@apollo/client/react";
 import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { ConfirmModal } from "../../ui/ConfirmModal";
+import { useSmartPoll } from "../../hooks/useSmartPoll";
 import { DashboardLayout } from "../../layouts/DashboardLayout";
 import { Button } from "../../ui/Button";
 import { ADMIN_ALL_USERS, ADMIN_CHANGE_USER_ROLE, ADMIN_UPDATE_SUBSCRIPTION, ADMIN_UPDATE_USER_PHONE, ADMIN_SUSPEND_USER, ADMIN_ACTIVATE_USER, ADMIN_CREATE_ADMIN_ACCOUNT, ADMIN_DELETE_USER } from "./admin.gql";
@@ -57,9 +58,10 @@ export function AdminUsers() {
   const { data: meData } = useQuery(ME_QUERY);
   const isSuperAdmin: boolean = meData?.me?.isSuperAdmin ?? false;
 
-  const { data, loading, error, refetch } = useQuery<UsersData>(ADMIN_ALL_USERS, {
+  const { data, loading, error, refetch, startPolling, stopPolling } = useQuery<UsersData>(ADMIN_ALL_USERS, {
     fetchPolicy: "network-only",
   });
+  useSmartPoll(startPolling, stopPolling, 60_000);
   const { data: appsData } = useQuery<{ adminPendingHostApplications: { firebaseUid: string }[] }>(
     ADMIN_PENDING_HOST_APPLICATIONS,
     { fetchPolicy: "network-only" },

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery } from "@apollo/client/react";
+import { useSmartPoll } from "../../hooks/useSmartPoll";
 import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
 import { MAPS_LIBRARIES } from "../../lib/googleMaps";
 import { XMarkIcon } from "@heroicons/react/24/outline";
@@ -364,10 +365,11 @@ function ListingReviewModal({
 }
 
 export function AdminPendingListings() {
-  const { data, loading, error, refetch } = useQuery<{ pendingListings: Listing[] }>(
+  const { data, loading, error, refetch, startPolling, stopPolling } = useQuery<{ pendingListings: Listing[] }>(
     PENDING_LISTINGS,
     { fetchPolicy: "network-only" }
   );
+  useSmartPoll(startPolling, stopPolling, 20_000);
   const { data: usersData } = useQuery<{ adminAllUsers: UserRecord[] }>(ADMIN_ALL_USERS);
   const listings = useMemo(() => data?.pendingListings ?? [], [data]);
   const users = useMemo(() => usersData?.adminAllUsers ?? [], [usersData]);

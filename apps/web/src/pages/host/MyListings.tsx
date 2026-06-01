@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from '@apollo/client/react';
+import { useSmartPoll } from '../../hooks/useSmartPoll';
 import { Link } from 'react-router-dom';
 import { MY_LISTINGS, DELETE_LISTING, UPDATE_LISTING } from './listings.gql';
 import { Card } from '../../ui/Card';
@@ -193,7 +194,10 @@ function ShareModal({
 }
 
 export function MyListings() {
-  const { data, loading, error, refetch } = useQuery<MyListingsData>(MY_LISTINGS);
+  const { data, loading, error, refetch, startPolling, stopPolling } = useQuery<MyListingsData>(MY_LISTINGS, {
+    fetchPolicy: "network-only",
+  });
+  useSmartPoll(startPolling, stopPolling, 20_000);
   const { isEnabledFor } = useFeatureFlags();
   const canCreateListing = isEnabledFor("HOST_LISTING_CREATION", "HOST");
   const [deleteListing] = useMutation(DELETE_LISTING, {

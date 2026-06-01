@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useCallback } from "react";
 import { useMutation, useQuery } from "@apollo/client/react";
+import { useSmartPoll } from "../../hooks/useSmartPoll";
 import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
 import { ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/24/outline";
 import { MAPS_LIBRARIES } from "../../lib/googleMaps";
@@ -251,10 +252,11 @@ function ApplicationCard({
 }
 
 export function AdminHostApplications() {
-  const { data, loading, error, refetch } = useQuery<{ adminPendingHostApplications: HostApplication[] }>(
+  const { data, loading, error, refetch, startPolling, stopPolling } = useQuery<{ adminPendingHostApplications: HostApplication[] }>(
     ADMIN_PENDING_HOST_APPLICATIONS,
     { fetchPolicy: "network-only" }
   );
+  useSmartPoll(startPolling, stopPolling, 20_000);
 
   const [reviewApplication, { loading: reviewing }] = useMutation(ADMIN_REVIEW_HOST_APPLICATION);
   const [actionError, setActionError] = useState<string | null>(null);

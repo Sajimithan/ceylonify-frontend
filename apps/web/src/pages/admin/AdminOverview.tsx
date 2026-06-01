@@ -1,4 +1,5 @@
 import { useQuery } from "@apollo/client/react";
+import { useSmartPoll } from "../../hooks/useSmartPoll";
 import { Link } from "react-router-dom";
 import {
   BarChart,
@@ -40,9 +41,10 @@ type StatsData = {
 };
 
 export function AdminOverview() {
-  const { data, loading, error, refetch } = useQuery<StatsData>(ADMIN_STATS, {
+  const { data, loading, error, refetch, startPolling, stopPolling } = useQuery<StatsData>(ADMIN_STATS, {
     fetchPolicy: "network-only",
   });
+  useSmartPoll(startPolling, stopPolling, 30_000);
 
   const listingChartData = data
     ? [
