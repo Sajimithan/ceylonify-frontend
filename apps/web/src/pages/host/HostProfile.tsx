@@ -8,14 +8,22 @@ import {
   reauthenticateWithCredential,
   signOut,
 } from "firebase/auth";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { auth, storage } from "../../auth/firebase";
+import { auth } from "../../auth/firebase";
 import { useAuth } from "../../auth/useAuth";
 import { DELETE_MY_ACCOUNT } from "../premium.gql";
 import { DashboardLayout } from "../../layouts/DashboardLayout";
 import { Input } from "../../ui/Input";
 import { Button } from "../../ui/Button";
 import { ME_QUERY } from "../browse.gql";
+
+const UPDATE_PROFILE = gql`
+  mutation UpdateProfile($displayName: String, $avatarUrl: String) {
+    updateProfile(displayName: $displayName, avatarUrl: $avatarUrl) {
+      firebaseUid
+      avatarUrl
+    }
+  }
+`;
 
 const HOST_BADGE = gql`
   query HostBadge($firebaseUid: String!) {
@@ -75,6 +83,7 @@ export function HostProfile() {
     skip: !user?.uid,
   });
   const [deleteMyAccount] = useMutation(DELETE_MY_ACCOUNT);
+  const [updateProfileMutation] = useMutation(UPDATE_PROFILE);
 
   async function handleDeleteAccount() {
     if (!confirm("Are you sure you want to permanently delete your account and all your listings?")) return;
@@ -106,11 +115,15 @@ export function HostProfile() {
     setPhotoUploading(true);
     setPhotoMsg(null);
     try {
-      const storageRef = ref(storage, `profile-pictures/${user.uid}`);
-      await uploadBytes(storageRef, file);
-      const downloadURL = await getDownloadURL(storageRef);
-      await updateProfile(user, { photoURL: downloadURL });
-      setLocalPhotoURL(downloadURL);
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("http://localhost:3000/upload", { method: "POST", body: formData });
+      if (!res.ok) throw new Error("Upload failed");
+      const { url } = await res.json() as { url: string };
+      const fullUrl = `http://localhost:3000${url}`;
+      await updateProfile(user, { photoURL: fullUrl });
+      await updateProfileMutation({ variables: { avatarUrl: fullUrl } });
+      setLocalPhotoURL(fullUrl);
       setPhotoMsg({ ok: true, text: "Profile photo updated." });
     } catch {
       setPhotoMsg({ ok: false, text: "Upload failed. Please try again." });
