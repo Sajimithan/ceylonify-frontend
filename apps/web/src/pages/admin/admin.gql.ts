@@ -42,6 +42,7 @@ export const ADMIN_ALL_USERS = gql`
       phone
       isSuspended
       subscriptionExpiresAt
+      avatarUrl
     }
   }
 `;

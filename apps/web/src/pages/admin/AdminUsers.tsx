@@ -19,6 +19,7 @@ type UserRecord = {
   phone?: string;
   isSuspended?: boolean;
   subscriptionExpiresAt?: string;
+  avatarUrl?: string;
 };
 
 const BADGE_EMOJI: Record<string, string> = {
@@ -313,11 +314,19 @@ export function AdminUsers() {
                     {/* User cell */}
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-3">
-                        <div
-                          className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${userAvatarColor(u.role)}`}
-                        >
-                          {userInitials(u.email)}
-                        </div>
+                        {u.avatarUrl ? (
+                          <img
+                            src={u.avatarUrl}
+                            alt=""
+                            className="w-8 h-8 rounded-full object-cover flex-shrink-0 ring-1 ring-slate-200"
+                          />
+                        ) : (
+                          <div
+                            className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${userAvatarColor(u.role)}`}
+                          >
+                            {userInitials(u.email)}
+                          </div>
+                        )}
                         <div>
                           <div className="flex items-center gap-1.5">
                             <div
