@@ -4,6 +4,8 @@ export function Badge({ value }: { value: string }) {
       ? "text-emerald-600 bg-emerald-200"
       : value === "REJECTED"
       ? "text-red-600 bg-red-200"
+      : value === "SUSPENDED"
+      ? "text-orange-600 bg-orange-100"
       : "text-amber-600 bg-amber-200";
 
   return (

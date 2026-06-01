@@ -564,17 +564,19 @@ export function Browse() {
                         <div className="text-white text-xs font-bold mt-1">Host only</div>
                       </div>
                     )}
-                    {/* Save button */}
-                    <button
-                      className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center rounded-full bg-white/80 hover:bg-white shadow text-base transition-colors"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleSave(listing.id);
-                      }}
-                      title={isSaved ? "Unsave" : "Save"}
-                    >
-                      {isSaved ? "❤️" : "🤍"}
-                    </button>
+                    {/* Save button — hidden for past events */}
+                    {!(listing.type === "EVENT" && listing.startDateTime && new Date(listing.startDateTime) < new Date()) && (
+                      <button
+                        className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center rounded-full bg-white/80 hover:bg-white shadow text-base transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleSave(listing.id);
+                        }}
+                        title={isSaved ? "Unsave" : "Save"}
+                      >
+                        {isSaved ? "❤️" : "🤍"}
+                      </button>
+                    )}
                   </div>
 
                   {/* Content */}
@@ -617,7 +619,7 @@ export function Browse() {
                         )}
                       </div>
                     </div>
-                    {listing.type === "EVENT" && (
+                    {listing.type === "EVENT" && !(listing.startDateTime && new Date(listing.startDateTime) < new Date()) && (
                       <button
                         onClick={(e) => handleGoing(e, listing.id, goingIds.has(listing.id))}
                         className={`mt-3 w-full py-1.5 rounded-lg text-xs font-bold border-2 transition-colors ${

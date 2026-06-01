@@ -45,7 +45,7 @@ export default function LandingScreen() {
           <Text style={styles.secondaryButtonText}>I already have an account</Text>
         </TouchableOpacity>
 
-        <Text style={styles.footerNote}>Index: 220596H · © {new Date().getFullYear()} Ceylonify</Text>
+        <Text style={styles.footerNote}>© {new Date().getFullYear()} Ceylonify</Text>
       </View>
     </View>
   );

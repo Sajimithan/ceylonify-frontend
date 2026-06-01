@@ -17,6 +17,18 @@ export const ADMIN_STATS = gql`
   }
 `;
 
+export const ADMIN_CREATE_ADMIN_ACCOUNT = gql`
+  mutation AdminCreateAdminAccount($email: String!, $password: String!) {
+    adminCreateAdminAccount(email: $email, password: $password)
+  }
+`;
+
+export const ADMIN_DELETE_USER = gql`
+  mutation AdminDeleteUser($firebaseUid: String!) {
+    adminDeleteUser(firebaseUid: $firebaseUid)
+  }
+`;
+
 export const ADMIN_ALL_USERS = gql`
   query AdminAllUsers {
     adminAllUsers {
@@ -28,6 +40,44 @@ export const ADMIN_ALL_USERS = gql`
       badgeLevel
       approvedCount
       phone
+      isSuspended
+      subscriptionExpiresAt
+    }
+  }
+`;
+
+export const ADMIN_SUSPEND_USER = gql`
+  mutation AdminSuspendUser($firebaseUid: String!) {
+    adminSuspendUser(firebaseUid: $firebaseUid)
+  }
+`;
+
+export const ADMIN_ACTIVATE_USER = gql`
+  mutation AdminActivateUser($firebaseUid: String!) {
+    adminActivateUser(firebaseUid: $firebaseUid)
+  }
+`;
+
+export const ADMIN_SUSPEND_LISTING = gql`
+  mutation AdminSuspendListing($id: String!) {
+    adminSuspendListing(id: $id)
+  }
+`;
+
+export const ADMIN_BROADCAST_ANNOUNCEMENT = gql`
+  mutation AdminBroadcastAnnouncement($title: String!, $body: String!) {
+    adminBroadcastAnnouncement(title: $title, body: $body)
+  }
+`;
+
+export const ADMIN_SUBSCRIPTION_HISTORY = gql`
+  query AdminSubscriptionHistory($firebaseUid: String!) {
+    adminSubscriptionHistory(firebaseUid: $firebaseUid) {
+      id
+      fromTier
+      toTier
+      changedAt
+      changedBy
     }
   }
 `;

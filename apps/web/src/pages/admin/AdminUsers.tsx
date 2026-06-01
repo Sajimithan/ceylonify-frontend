@@ -4,7 +4,9 @@ import { useMutation, useQuery } from "@apollo/client/react";
 import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { DashboardLayout } from "../../layouts/DashboardLayout";
 import { Button } from "../../ui/Button";
-import { ADMIN_ALL_USERS, ADMIN_CHANGE_USER_ROLE, ADMIN_UPDATE_SUBSCRIPTION, ADMIN_UPDATE_USER_PHONE } from "./admin.gql";
+import { ADMIN_ALL_USERS, ADMIN_CHANGE_USER_ROLE, ADMIN_UPDATE_SUBSCRIPTION, ADMIN_UPDATE_USER_PHONE, ADMIN_SUSPEND_USER, ADMIN_ACTIVATE_USER, ADMIN_CREATE_ADMIN_ACCOUNT, ADMIN_DELETE_USER } from "./admin.gql";
+import { ADMIN_PENDING_HOST_APPLICATIONS } from "./host-applications.gql";
+import { ME_QUERY } from "../browse.gql";
 
 type UserRecord = {
   id: string;
@@ -15,6 +17,8 @@ type UserRecord = {
   badgeLevel?: string;
   approvedCount?: number;
   phone?: string;
+  isSuspended?: boolean;
+  subscriptionExpiresAt?: string;
 };
 
 const BADGE_EMOJI: Record<string, string> = {
@@ -48,18 +52,40 @@ function userInitials(email?: string) {
 
 export function AdminUsers() {
   const nav = useNavigate();
+  const { data: meData } = useQuery(ME_QUERY);
+  const isSuperAdmin: boolean = meData?.me?.isSuperAdmin ?? false;
+
   const { data, loading, error, refetch } = useQuery<UsersData>(ADMIN_ALL_USERS, {
     fetchPolicy: "network-only",
   });
+  const { data: appsData } = useQuery<{ adminPendingHostApplications: { firebaseUid: string }[] }>(
+    ADMIN_PENDING_HOST_APPLICATIONS,
+    { fetchPolicy: "network-only" },
+  );
+  const pendingUids = new Set((appsData?.adminPendingHostApplications ?? []).map((a) => a.firebaseUid));
 
+  const [showRegisterPanel, setShowRegisterPanel] = useState(false);
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
+  const [registerStatus, setRegisterStatus] = useState<"idle" | "success" | "error">("idle");
+  const [registerError, setRegisterError] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  const [createAdminAccount, { loading: creating }] = useMutation(ADMIN_CREATE_ADMIN_ACCOUNT);
   const [changeRole, { loading: updating }] = useMutation(ADMIN_CHANGE_USER_ROLE);
   const [updateSubscription, { loading: updatingSub }] = useMutation(ADMIN_UPDATE_SUBSCRIPTION);
   const [updatePhone] = useMutation(ADMIN_UPDATE_USER_PHONE);
+  const [suspendUser] = useMutation(ADMIN_SUSPEND_USER, { onCompleted: () => refetch() });
+  const [activateUser] = useMutation(ADMIN_ACTIVATE_USER, { onCompleted: () => refetch() });
+  const [deleteUser] = useMutation(ADMIN_DELETE_USER);
   const [editingId, setEditingId]     = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState("TRAVELER");
   const [search, setSearch]           = useState("");
   const [editingPhoneUid, setEditingPhoneUid] = useState<string | null>(null);
   const [phoneInput, setPhoneInput]   = useState("");
+
+  const isPremiumUser = (u: { subscriptionExpiresAt?: string | null }) =>
+    !!u.subscriptionExpiresAt && new Date(u.subscriptionExpiresAt) > new Date();
 
   async function handleRoleChange(id: string) {
     if (!editingId) return;
@@ -82,6 +108,36 @@ export function AdminUsers() {
     } catch (e) {
       console.error("Failed to update phone", e);
     }
+  }
+
+  function generatePassword() {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789@#$!";
+    const bytes = crypto.getRandomValues(new Uint8Array(12));
+    setAdminPassword(Array.from(bytes).map((b) => chars[b % chars.length]).join(""));
+    setRegisterStatus("idle");
+    setRegisterError("");
+  }
+
+  async function handleCreateAdmin() {
+    if (!adminEmail.trim() || !adminPassword) return;
+    setRegisterStatus("idle");
+    setRegisterError("");
+    try {
+      const createdEmail = adminEmail.trim();
+      await createAdminAccount({ variables: { email: createdEmail, password: adminPassword } });
+      setRegisterStatus("success");
+      setAdminPassword("");
+      await refetch();
+    } catch (e: unknown) {
+      setRegisterStatus("error");
+      setRegisterError((e as Error)?.message ?? "Failed to create admin account.");
+    }
+  }
+
+  async function copyPassword() {
+    await navigator.clipboard.writeText(adminPassword);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   }
 
   const filteredUsers = (data?.adminAllUsers ?? []).filter(
@@ -119,6 +175,94 @@ export function AdminUsers() {
             {error.message}
           </div>
         )}
+
+        {/* Register Admin Panel */}
+        <div className="bg-white rounded-xl shadow mb-4 overflow-hidden">
+          <button
+            onClick={() => { setShowRegisterPanel(!showRegisterPanel); setRegisterStatus("idle"); setRegisterError(""); setAdminEmail(""); setAdminPassword(""); }}
+            className="w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-slate-50 transition-colors"
+          >
+            <span className="text-sm font-bold text-slate-700">+ Register New Admin</span>
+            <span className="text-slate-400 text-xs font-semibold">{showRegisterPanel ? "▲ Collapse" : "▼ Expand"}</span>
+          </button>
+
+          {showRegisterPanel && (
+            <div className="border-t border-slate-100 px-5 py-5 space-y-4">
+              {/* Email */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5">Email Address</label>
+                <input
+                  type="email"
+                  value={adminEmail}
+                  onChange={(e) => setAdminEmail(e.target.value)}
+                  placeholder="admin@example.com"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-700 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-brand-400"
+                />
+              </div>
+
+              {/* Generate Password */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5">Password</label>
+                <div className="flex gap-2">
+                  {adminPassword ? (
+                    <div className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5">
+                      <code className="flex-1 text-sm font-mono text-brand-700 tracking-wider">{adminPassword}</code>
+                      <button
+                        type="button"
+                        onClick={copyPassword}
+                        className="text-[11px] font-bold text-slate-400 hover:text-brand-600 transition-colors flex-shrink-0"
+                        title="Copy password"
+                      >
+                        {copied ? "✓ Copied" : "Copy"}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex-1 border border-dashed border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-300">
+                      Click generate to create a secure password
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={generatePassword}
+                    className="flex-shrink-0 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs rounded-lg transition-colors"
+                  >
+                    Generate
+                  </button>
+                </div>
+              </div>
+
+              {/* Status messages */}
+              {registerStatus === "success" && (
+                <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-4 space-y-2">
+                  <p className="text-sm font-bold text-emerald-700">✅ Admin account created and credentials emailed.</p>
+                  <p className="text-xs text-emerald-600">Login credentials were sent to:</p>
+                  <div className="bg-white border border-emerald-200 rounded-lg px-4 py-3 space-y-1">
+                    <div className="text-xs text-slate-400 font-semibold uppercase">Email</div>
+                    <div className="text-sm font-mono text-slate-700">{adminEmail || "—"}</div>
+                  </div>
+                </div>
+              )}
+              {registerStatus === "error" && (
+                <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm font-semibold text-red-700">
+                  {registerError}
+                </div>
+              )}
+
+              {/* Create button */}
+              <button
+                type="button"
+                onClick={handleCreateAdmin}
+                disabled={creating || !adminEmail.trim() || !adminPassword}
+                className="w-full py-2.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-sm rounded-lg transition-colors"
+              >
+                {creating ? "Sending…" : "Create and Send Mail"}
+              </button>
+              <p className="text-[11px] text-slate-400 text-center">
+                The account is created and login credentials are emailed to the new admin automatically.
+              </p>
+            </div>
+          )}
+        </div>
 
         {/* Search bar */}
         <div className="bg-white rounded-xl shadow mb-4 px-4 py-3 flex items-center gap-3">
@@ -175,11 +319,16 @@ export function AdminUsers() {
                           {userInitials(u.email)}
                         </div>
                         <div>
-                          <div
-                            className={`text-sm font-semibold leading-tight ${u.role === "HOST" ? "text-brand-600 hover:underline cursor-pointer" : "text-slate-700"}`}
-                            onClick={() => u.role === "HOST" && nav(`/admin/users/${u.firebaseUid}`)}
-                          >
-                            {u.email || "No Email (Provider Auth)"}
+                          <div className="flex items-center gap-1.5">
+                            <div
+                              className={`text-sm font-semibold leading-tight ${u.role === "HOST" ? "text-brand-600 hover:underline cursor-pointer" : "text-slate-700"}`}
+                              onClick={() => u.role === "HOST" && nav(`/admin/users/${u.firebaseUid}`)}
+                            >
+                              {u.email || "No Email (Provider Auth)"}
+                            </div>
+                            {u.isSuspended && (
+                              <span className="text-[9px] font-bold bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full uppercase">Suspended</span>
+                            )}
                           </div>
                           <div className="text-[10px] font-mono text-slate-400 mt-0.5">
                             {u.id.slice(0, 8)}…
@@ -251,17 +400,29 @@ export function AdminUsers() {
                         </select>
                       ) : (
                         <div className="flex flex-col gap-1.5">
-                          <span
-                            className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide w-fit
-                              ${u.role === "ADMIN"
-                                ? "bg-slate-800 text-white"
-                                : u.role === "HOST"
-                                ? "bg-violet-100 text-violet-700"
-                                : "bg-brand-100 text-brand-700"
-                              }`}
-                          >
-                            {u.role}
-                          </span>
+                          {!(u.role === "ADMIN" && u.firebaseUid === meData?.me?.firebaseUid && isSuperAdmin) && (
+                            <span
+                              className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide w-fit
+                                ${u.role === "ADMIN"
+                                  ? "bg-slate-800 text-white"
+                                  : u.role === "HOST"
+                                  ? "bg-violet-100 text-violet-700"
+                                  : "bg-brand-100 text-brand-700"
+                                }`}
+                            >
+                              {u.role}
+                            </span>
+                          )}
+                          {u.role === "TRAVELER" && pendingUids.has(u.firebaseUid) && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border w-fit bg-amber-50 text-amber-700 border-amber-300">
+                              ⏳ Host Pending
+                            </span>
+                          )}
+                          {u.role === "ADMIN" && u.firebaseUid === meData?.me?.firebaseUid && isSuperAdmin && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border w-fit bg-slate-800 text-white border-slate-700">
+                              👑 Super Admin
+                            </span>
+                          )}
                           {u.badgeLevel && u.badgeLevel !== "NONE" && (
                             <span
                               className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border w-fit ${BADGE_STYLE[u.badgeLevel] ?? ""}`}
@@ -304,6 +465,7 @@ export function AdminUsers() {
                           </>
                         ) : (
                           <>
+                            {(u.role !== "ADMIN" || isSuperAdmin) && (
                             <button
                               className="text-[10px] font-bold text-brand-600 hover:text-brand-800 border border-brand-200 hover:bg-brand-50 px-3 py-1 rounded-lg transition-colors"
                               onClick={() => {
@@ -313,31 +475,8 @@ export function AdminUsers() {
                             >
                               Edit Role
                             </button>
-                            {u.role === "TRAVELER" && (
-                              <button
-                                className="text-[10px] font-bold text-violet-600 hover:text-violet-800 border border-violet-200 hover:bg-violet-50 px-3 py-1 rounded-lg transition-colors disabled:opacity-40"
-                                disabled={updating}
-                                onClick={async () => {
-                                  await changeRole({ variables: { id: u.id, role: "HOST" } });
-                                  await refetch();
-                                }}
-                              >
-                                Grant Host
-                              </button>
                             )}
-                            {u.role === "HOST" && (
-                              <button
-                                className="text-[10px] font-bold text-slate-500 hover:text-slate-700 border border-slate-200 hover:bg-slate-50 px-3 py-1 rounded-lg transition-colors disabled:opacity-40"
-                                disabled={updating}
-                                onClick={async () => {
-                                  await changeRole({ variables: { id: u.id, role: "TRAVELER" } });
-                                  await refetch();
-                                }}
-                              >
-                                Revoke Host
-                              </button>
-                            )}
-                            {u.role === "TRAVELER" && (
+                            {u.role === "TRAVELER" && !isPremiumUser(u) && (
                               <button
                                 className="text-[10px] font-bold text-amber-600 hover:text-amber-800 border border-amber-200 hover:bg-amber-50 px-3 py-1 rounded-lg transition-colors disabled:opacity-40"
                                 disabled={updatingSub}
@@ -350,7 +489,7 @@ export function AdminUsers() {
                                 Grant Premium
                               </button>
                             )}
-                            {u.role === "TRAVELER" && (
+                            {u.role === "TRAVELER" && isPremiumUser(u) && (
                               <button
                                 className="text-[10px] font-bold text-slate-400 hover:text-slate-600 border border-slate-200 hover:bg-slate-50 px-3 py-1 rounded-lg transition-colors disabled:opacity-40"
                                 disabled={updatingSub}
@@ -361,6 +500,45 @@ export function AdminUsers() {
                                 }}
                               >
                                 Revoke Premium
+                              </button>
+                            )}
+                            {(u.role !== "ADMIN" || isSuperAdmin) && u.firebaseUid !== meData?.me?.firebaseUid && (
+                              u.isSuspended ? (
+                                <button
+                                  className="text-[10px] font-bold text-emerald-600 border border-emerald-200 hover:bg-emerald-50 px-3 py-1 rounded-lg transition-colors"
+                                  title="Re-activate this account"
+                                  onClick={() => activateUser({ variables: { firebaseUid: u.firebaseUid } })}
+                                >
+                                  Activate
+                                </button>
+                              ) : (
+                                <button
+                                  className="text-[10px] font-bold text-red-500 border border-red-200 hover:bg-red-50 px-3 py-1 rounded-lg transition-colors"
+                                  title="Suspend this account"
+                                  onClick={() => {
+                                    if (confirm(`Suspend account for ${u.email ?? u.firebaseUid}?`))
+                                      suspendUser({ variables: { firebaseUid: u.firebaseUid } });
+                                  }}
+                                >
+                                  Suspend
+                                </button>
+                              )
+                            )}
+                            {u.firebaseUid !== meData?.me?.firebaseUid && (
+                              <button
+                                className="text-[10px] font-bold text-red-700 hover:text-red-900 border border-red-300 hover:bg-red-50 px-3 py-1 rounded-lg transition-colors"
+                                title="Permanently delete this account"
+                                onClick={async () => {
+                                  if (!confirm(`Permanently delete account for ${u.email ?? u.firebaseUid}? This cannot be undone.`)) return;
+                                  try {
+                                    await deleteUser({ variables: { firebaseUid: u.firebaseUid } });
+                                    await refetch();
+                                  } catch (e) {
+                                    alert((e as Error)?.message ?? "Failed to delete user.");
+                                  }
+                                }}
+                              >
+                                Delete
                               </button>
                             )}
                           </>

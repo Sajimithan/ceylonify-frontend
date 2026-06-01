@@ -3,6 +3,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@apollo/client/react";
 import { DashboardLayout } from "../../layouts/DashboardLayout";
 import { ADMIN_HOST_DETAIL } from "../hosts.gql";
+import { ADMIN_SUBSCRIPTION_HISTORY } from "./admin.gql";
+import { ADMIN_GET_HOST_APPLICATION } from "./host-applications.gql";
 import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 
 const BADGE_EMOJI: Record<string, string> = { DIAMOND: "💎", GOLD: "🥇", SILVER: "🥈", BRONZE: "🥉", NONE: "" };
@@ -34,8 +36,18 @@ export function AdminUserDetail() {
     variables: { firebaseUid },
     skip: !firebaseUid,
   });
+  const { data: historyData } = useQuery(ADMIN_SUBSCRIPTION_HISTORY, {
+    variables: { firebaseUid },
+    skip: !firebaseUid,
+  });
+  const { data: appData } = useQuery(ADMIN_GET_HOST_APPLICATION, {
+    variables: { firebaseUid },
+    skip: !firebaseUid,
+  });
 
   const host = data?.adminHostDetail;
+  const subscriptionHistory = historyData?.adminSubscriptionHistory ?? [];
+  const hostApp = appData?.adminGetHostApplication;
 
   return (
     <DashboardLayout title="Host Detail" subtitle="View host performance and event history">
@@ -95,6 +107,146 @@ export function AdminUserDetail() {
                 </div>
               ))}
             </div>
+
+            {/* Host Profile — registration details */}
+            {hostApp && (
+              <div className="bg-white rounded-2xl shadow p-6 mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-slate-400 font-bold text-xs uppercase">Host Registration Profile</h2>
+                  <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase ${
+                    hostApp.status === "APPROVED" ? "bg-emerald-100 text-emerald-700" :
+                    hostApp.status === "REJECTED" ? "bg-red-100 text-red-700" :
+                    "bg-amber-100 text-amber-700"
+                  }`}>
+                    {hostApp.status}
+                  </span>
+                </div>
+
+                <div className="grid gap-6 sm:grid-cols-2">
+                  {/* Business info */}
+                  <div className="space-y-3">
+                    <h3 className="text-[11px] font-bold uppercase text-slate-300 tracking-wider">Business Info</h3>
+                    {hostApp.hostTypes && (
+                      <div>
+                        <div className="text-[10px] font-bold uppercase text-slate-400 mb-1">Host Types</div>
+                        <div className="flex flex-wrap gap-1">
+                          {(() => {
+                            try {
+                              return (JSON.parse(hostApp.hostTypes) as string[]).map((t) => (
+                                <span key={t} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 border border-brand-200">
+                                  {t.replace(/_/g, " ")}
+                                </span>
+                              ));
+                            } catch {
+                              return <span className="text-xs text-slate-500">{hostApp.hostTypes}</span>;
+                            }
+                          })()}
+                        </div>
+                      </div>
+                    )}
+                    {hostApp.businessName && (
+                      <div>
+                        <div className="text-[10px] font-bold uppercase text-slate-400 mb-0.5">Business Name</div>
+                        <div className="text-sm text-slate-700 font-semibold">{hostApp.businessName}</div>
+                      </div>
+                    )}
+                    {hostApp.businessAddress && (
+                      <div>
+                        <div className="text-[10px] font-bold uppercase text-slate-400 mb-0.5">Address</div>
+                        <div className="text-sm text-slate-600">{hostApp.businessAddress}</div>
+                      </div>
+                    )}
+                    {hostApp.phoneNumber && (
+                      <div>
+                        <div className="text-[10px] font-bold uppercase text-slate-400 mb-0.5">Phone</div>
+                        <div className="text-sm text-slate-600 font-mono">{hostApp.phoneNumber}</div>
+                      </div>
+                    )}
+                    {hostApp.licenseNumber && (
+                      <div>
+                        <div className="text-[10px] font-bold uppercase text-slate-400 mb-0.5">License Number</div>
+                        <div className="text-sm text-slate-600 font-mono">{hostApp.licenseNumber}</div>
+                      </div>
+                    )}
+                    {hostApp.businessLat && hostApp.businessLng && (
+                      <div>
+                        <div className="text-[10px] font-bold uppercase text-slate-400 mb-1">Business Location</div>
+                        <a
+                          href={`https://www.google.com/maps/search/?api=1&query=${hostApp.businessLat},${hostApp.businessLng}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs font-mono text-sky-600 hover:underline"
+                        >
+                          📍 {hostApp.businessLat.toFixed(5)}, {hostApp.businessLng.toFixed(5)} ↗
+                        </a>
+                      </div>
+                    )}
+                    {hostApp.submittedAt && (
+                      <div>
+                        <div className="text-[10px] font-bold uppercase text-slate-400 mb-0.5">Submitted</div>
+                        <div className="text-xs text-slate-500">
+                          {new Date(hostApp.submittedAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+                        </div>
+                      </div>
+                    )}
+                    {hostApp.reviewNote && (
+                      <div>
+                        <div className="text-[10px] font-bold uppercase text-slate-400 mb-0.5">Review Note</div>
+                        <div className="text-xs text-slate-600 bg-slate-50 rounded-lg px-3 py-2">{hostApp.reviewNote}</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Documents */}
+                  <div className="space-y-3">
+                    <h3 className="text-[11px] font-bold uppercase text-slate-300 tracking-wider">Documents</h3>
+                    {hostApp.idType && (
+                      <div className="text-[10px] font-bold uppercase text-slate-400 mb-1">
+                        ID Type: <span className="text-slate-600 normal-case font-semibold">{hostApp.idType.replace(/_/g, " ")}</span>
+                      </div>
+                    )}
+                    {[
+                      { label: "ID Document", url: hostApp.idDocumentUrl },
+                      { label: "Business Registration", url: hostApp.businessDocUrl },
+                      { label: "Health Certificate", url: hostApp.healthCertUrl },
+                      { label: "License Document", url: hostApp.licenseDocUrl },
+                      { label: "Bank Document", url: hostApp.bankDocUrl },
+                    ].map(({ label, url }) => (
+                      <div key={label} className="flex items-center justify-between py-2 border-b border-slate-50 last:border-0">
+                        <span className="text-xs font-semibold text-slate-600">{label}</span>
+                        {url ? (
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[11px] font-bold text-sky-600 hover:text-sky-800 bg-sky-50 hover:bg-sky-100 px-2.5 py-1 rounded-lg transition-colors"
+                          >
+                            View ↗
+                          </a>
+                        ) : (
+                          <span className="text-[11px] text-slate-300 font-semibold">Not provided</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Subscription History */}
+            {subscriptionHistory.length > 0 && (
+              <div className="bg-white rounded-xl shadow p-5 mb-5">
+                <h2 className="text-slate-400 font-bold text-xs uppercase mb-3">Subscription History</h2>
+                <div className="space-y-2">
+                  {subscriptionHistory.map((e: { id: string; fromTier: string; toTier: string; changedAt: string; changedBy: string }) => (
+                    <div key={e.id} className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-slate-600">{e.fromTier} → <span className={e.toTier === 'PREMIUM' ? 'text-amber-600' : 'text-slate-400'}>{e.toTier}</span></span>
+                      <span className="text-slate-400">{new Date(e.changedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Tab bar */}
             <div className="mb-4 flex items-center gap-1 bg-white rounded-xl shadow px-2 py-1.5 w-fit">

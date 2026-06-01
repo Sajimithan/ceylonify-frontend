@@ -87,11 +87,17 @@ export function HostPublicProfile() {
             </div>
 
             {/* Upcoming events */}
-            {host.upcomingEvents.length > 0 && (
+            {(() => {
+              const now = new Date();
+              const upcoming = (host.upcomingEvents as Listing[]).filter(
+                (l) => !(l.type === "EVENT" && l.startDateTime && new Date(l.startDateTime) < now),
+              );
+              if (upcoming.length === 0) return null;
+              return (
               <div className="mb-8">
                 <h2 className="text-slate-600 font-bold text-sm uppercase mb-4">Upcoming Experiences</h2>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {(host.upcomingEvents as Listing[]).map((l) => (
+                  {upcoming.map((l) => (
                     <div
                       key={l.id}
                       onClick={() => nav(`/listing/${l.id}`)}
@@ -114,7 +120,8 @@ export function HostPublicProfile() {
                   ))}
                 </div>
               </div>
-            )}
+              );
+            })()}
 
             {/* Past events + experiences */}
             {host.pastEvents.length > 0 && (

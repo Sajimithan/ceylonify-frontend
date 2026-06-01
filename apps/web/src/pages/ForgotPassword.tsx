@@ -1,34 +1,31 @@
 import { useState } from "react";
-import { sendPasswordResetEmail } from "firebase/auth";
-import { auth } from "../auth/firebase";
+import { gql } from "@apollo/client";
+import { useMutation } from "@apollo/client/react";
 import { Link } from "react-router-dom";
 import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
 
+const FORGOT_PASSWORD = gql`
+  mutation ForgotPassword($email: String!) {
+    forgotPassword(email: $email)
+  }
+`;
+
 export function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [err, setErr] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+
+  const [forgotPassword, { loading }] = useMutation(FORGOT_PASSWORD);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
-    setLoading(true);
     try {
-      await sendPasswordResetEmail(auth, email.trim());
+      await forgotPassword({ variables: { email: email.trim() } });
       setSent(true);
-    } catch (e: unknown) {
-      const error = e as { code?: string; message?: string };
-      if (error.code === "auth/user-not-found") {
-        setErr("No account found with this email address.");
-      } else if (error.code === "auth/invalid-email") {
-        setErr("Please enter a valid email address.");
-      } else {
-        setErr(error.message ?? "Failed to send reset email. Please try again.");
-      }
-    } finally {
-      setLoading(false);
+    } catch {
+      setErr("Failed to send reset email. Please try again.");
     }
   }
 
@@ -93,6 +90,7 @@ export function ForgotPassword() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 autoComplete="email"
+                placeholder="example@email.com"
               />
 
               {err && (
@@ -101,7 +99,7 @@ export function ForgotPassword() {
                 </div>
               )}
 
-              <Button type="submit" disabled={loading} className="w-full">
+              <Button type="submit" disabled={loading || !email.trim()} className="w-full">
                 {loading ? "Sending…" : "Send Reset Link"}
               </Button>
             </form>
@@ -117,7 +115,7 @@ export function ForgotPassword() {
       </div>
 
       <div className="absolute bottom-6 z-10 text-xs text-white/40">
-        © {new Date().getFullYear()} Ceylonify · Index 220596H
+        © {new Date().getFullYear()} Ceylonify
       </div>
     </div>
   );

@@ -72,7 +72,7 @@ export function Landing() {
                   to="/register"
                   className="text-sm font-bold text-white bg-brand-500 hover:bg-brand-600 px-5 py-2 rounded-lg shadow transition-colors"
                 >
-                  Get started
+                  Apply as Host
                 </Link>
               </>
             )}
@@ -139,23 +139,23 @@ export function Landing() {
       {/* CTA */}
       <div className="bg-brand-600 py-16 px-6 text-center">
         <h2 className="text-2xl font-bold text-white mb-3">
-          Ready to explore?
+          Ready to host?
         </h2>
         <p className="text-white/70 text-sm mb-8">
-          Join thousands of travelers discovering authentic Sri Lankan experiences.
+          Share your experiences and reach travelers across Sri Lanka.
         </p>
         <Link
           to={user ? "/browse" : "/register"}
           className="inline-block px-10 py-3 bg-white text-sky-600 font-bold rounded-xl shadow-lg hover:bg-sky-50 transition-colors text-sm uppercase tracking-wider"
         >
-          {user ? "Browse Now" : "Sign Up Free"}
+          {user ? "Browse Now" : "Apply as Host"}
         </Link>
       </div>
 
       {/* Footer */}
       <footer className="bg-slate-800 py-8 px-6 text-center">
         <div className="text-slate-400 text-xs">
-          © {new Date().getFullYear()} Ceylonify · Index 220596H
+          © {new Date().getFullYear()} Ceylonify
         </div>
       </footer>
     </div>

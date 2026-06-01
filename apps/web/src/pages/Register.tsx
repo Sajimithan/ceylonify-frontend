@@ -1,13 +1,10 @@
-import { useCallback, useRef, useState, useEffect } from "react";
+import { useCallback, useRef, useState } from "react";
 import { createUserWithEmailAndPassword, sendEmailVerification } from "firebase/auth";
-import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { gql } from "@apollo/client";
 import { useMutation } from "@apollo/client/react";
-import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
-
-const GmpAutocomplete = 'gmp-place-autocomplete' as any;
+import { GoogleMap, Marker, Autocomplete, useJsApiLoader } from "@react-google-maps/api";
 import { MAPS_LIBRARIES } from "../lib/googleMaps";
-import { auth, storage } from "../auth/firebase";
+import { auth } from "../auth/firebase";
 import { Link } from "react-router-dom";
 import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
@@ -26,7 +23,6 @@ type Step =
   | "identity"
   | "banking"
   | "review"
-  | "traveler-success"
   | "host-submitted";
 
 const HOST_TYPE_OPTIONS = [
@@ -123,32 +119,31 @@ function BusinessMapPicker({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string,
     libraries: MAPS_LIBRARIES,
   });
-  const autocompleteRef = useRef<HTMLElement | null>(null);
+  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
   const center = lat && lng ? { lat, lng } : { lat: 6.9271, lng: 79.8612 };
   const onLoad = useCallback(() => {}, []);
 
-  useEffect(() => {
-    const el = autocompleteRef.current;
-    if (!el) return;
-    async function handleSelect(e: Event) {
-      const { place } = (e as CustomEvent).detail;
-      await place.fetchFields({ fields: ['location'] });
-      const loc = place.location;
-      if (loc) onPick(loc.lat(), loc.lng());
-    }
-    el.addEventListener('gmp-placeselect', handleSelect);
-    return () => el.removeEventListener('gmp-placeselect', handleSelect);
-  }, [isLoaded, onPick]);
+  function onPlaceChanged() {
+    const place = autocompleteRef.current?.getPlace();
+    if (!place?.geometry?.location) return;
+    onPick(place.geometry.location.lat(), place.geometry.location.lng());
+  }
 
   if (!isLoaded) return <div className="h-40 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 text-xs">Loading map…</div>;
 
   return (
     <div className="space-y-2">
-      <GmpAutocomplete
-        ref={autocompleteRef}
-        placeholder="Search for your business location…"
-        style={{ width: '100%', display: 'block' }}
-      />
+      <Autocomplete
+        onLoad={(ref) => { autocompleteRef.current = ref; }}
+        onPlaceChanged={onPlaceChanged}
+        options={{ componentRestrictions: { country: "lk" } }}
+      >
+        <input
+          type="text"
+          placeholder="Search for your business location in Sri Lanka…"
+          className="border-0 px-3 py-3 placeholder-slate-300 text-slate-600 bg-white rounded text-sm shadow focus:outline-none focus:ring w-full ease-linear transition-all duration-150"
+        />
+      </Autocomplete>
       <GoogleMap
         mapContainerClassName="w-full h-48 rounded-xl shadow"
         center={center}
@@ -166,11 +161,42 @@ function BusinessMapPicker({
   );
 }
 
+function PageWrap({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="relative flex min-h-screen w-screen items-center justify-center overflow-hidden px-4 py-8"
+      style={{ backgroundImage: "url('/login-bg.png')", backgroundSize: "cover", backgroundPosition: "center" }}
+    >
+      <div className="absolute inset-0 bg-black/50" />
+      <div className="absolute left-8 top-6 z-10">
+        <Link to="/" className="flex items-center gap-2.5 hover:opacity-90 transition-opacity">
+          <img src="/logo.png" alt="Ceylonify" className="w-12 h-12 rounded-full object-cover shadow-lg ring-2 ring-white/20" />
+          <div>
+            <div className="text-white font-bold text-xl tracking-tight drop-shadow leading-tight">Ceylonify</div>
+            <div className="text-white/60 text-xs">Create your account</div>
+          </div>
+        </Link>
+      </div>
+      <div className="relative z-10 w-full max-w-lg">{children}</div>
+      <div className="absolute bottom-6 z-10 text-xs text-white/40">© {new Date().getFullYear()} Ceylonify</div>
+    </div>
+  );
+}
+
+function HostCard({ step, title, children }: { step: Step; title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-2xl bg-white/95 p-8 shadow-2xl backdrop-blur-sm">
+      <ProgressBar step={step} />
+      <h1 className="text-xl font-bold text-slate-800 mb-5">{title}</h1>
+      {children}
+    </div>
+  );
+}
+
 export function Register() {
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm]   = useState("");
-  const [role, setRole]         = useState<"TRAVELER" | "HOST">("TRAVELER");
   const [err, setErr]           = useState<string | null>(null);
   const [loading, setLoading]   = useState(false);
   const [step, setStep]         = useState<Step>("form");
@@ -191,24 +217,6 @@ export function Register() {
   const [bankDocFile, setBankDocFile]         = useState<File | null>(null);
 
   const [submitHostApplication] = useMutation(SUBMIT_HOST_APPLICATION);
-
-  // ── TRAVELER registration ─────────────────────────────────────────────────
-  async function onTravelerSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setErr(null);
-    if (password !== confirm) { setErr("Passwords do not match."); return; }
-    if (password.length < 6)  { setErr("Password must be at least 6 characters."); return; }
-    setLoading(true);
-    try {
-      const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
-      await sendEmailVerification(credential.user).catch(() => {});
-      setStep("traveler-success");
-    } catch (e: unknown) {
-      setErr((e as Error)?.message ?? "Registration failed.");
-    } finally {
-      setLoading(false);
-    }
-  }
 
   // ── HOST step navigation ──────────────────────────────────────────────────
   function goNextHostStep() {
@@ -233,21 +241,27 @@ export function Register() {
       await sendEmailVerification(credential.user).catch(() => {});
       const uid = credential.user.uid;
 
-      // 2. Upload files to Firebase Storage
-      async function uploadFile(file: File | null, name: string): Promise<string | undefined> {
+      // 2. Upload files via backend
+      async function uploadFile(file: File | null): Promise<string | undefined> {
         if (!file) return undefined;
-        const fileRef = storageRef(storage, `host-applications/${uid}/${name}`);
-        await uploadBytes(fileRef, file);
-        return getDownloadURL(fileRef);
+        const formData = new FormData();
+        formData.append("file", file);
+        const res = await fetch("http://localhost:3000/upload/document", {
+          method: "POST",
+          body: formData,
+        });
+        if (!res.ok) throw new Error("Failed to upload document");
+        const data = await res.json() as { url: string };
+        return "http://localhost:3000" + data.url;
       }
 
       const [idDocumentUrl, businessDocUrl, healthCertUrl, licenseDocUrl, bankDocUrl] =
         await Promise.all([
-          uploadFile(idFile,          "id-document"),
-          uploadFile(businessDocFile, "business-registration"),
-          uploadFile(healthCertFile,  "health-certificate"),
-          uploadFile(licenseDocFile,  "license-document"),
-          uploadFile(bankDocFile,     "bank-document"),
+          uploadFile(idFile),
+          uploadFile(businessDocFile),
+          uploadFile(healthCertFile),
+          uploadFile(licenseDocFile),
+          uploadFile(bankDocFile),
         ]);
 
       // 3. Submit application
@@ -279,50 +293,6 @@ export function Register() {
     }
   }
 
-  // ── Page background wrapper ────────────────────────────────────────────────
-  function PageWrap({ children }: { children: React.ReactNode }) {
-    return (
-      <div
-        className="relative flex min-h-screen w-screen items-center justify-center overflow-hidden px-4 py-8"
-        style={{ backgroundImage: "url('/login-bg.png')", backgroundSize: "cover", backgroundPosition: "center" }}
-      >
-        <div className="absolute inset-0 bg-black/50" />
-        <div className="absolute left-8 top-6 z-10">
-          <Link to="/" className="flex items-center gap-2.5 hover:opacity-90 transition-opacity">
-            <img src="/logo.png" alt="Ceylonify" className="w-12 h-12 rounded-full object-cover shadow-lg ring-2 ring-white/20" />
-            <div>
-              <div className="text-white font-bold text-xl tracking-tight drop-shadow leading-tight">Ceylonify</div>
-              <div className="text-white/60 text-xs">Create your account</div>
-            </div>
-          </Link>
-        </div>
-        <div className="relative z-10 w-full max-w-lg">{children}</div>
-        <div className="absolute bottom-6 z-10 text-xs text-white/40">© {new Date().getFullYear()} Ceylonify · Index 220596H</div>
-      </div>
-    );
-  }
-
-  // ── Success screens ───────────────────────────────────────────────────────
-  if (step === "traveler-success") {
-    return (
-      <PageWrap>
-        <div className="rounded-2xl bg-white/95 p-10 shadow-2xl backdrop-blur-sm text-center">
-          <div className="text-5xl mb-4">🎉</div>
-          <h2 className="text-xl font-bold text-slate-700 mb-2">Registration Successful!</h2>
-          <p className="text-sm text-slate-500 leading-relaxed mb-6">Welcome to Ceylonify! Your Traveler account has been created.</p>
-          <div className="rounded-xl bg-sky-50 border border-sky-100 px-5 py-4 mb-3 text-left">
-            <div className="text-xs font-bold uppercase text-sky-600 mb-1">Next step</div>
-            <p className="text-sm text-sky-800">Download the <span className="font-bold">Ceylonify mobile app</span> to discover and book authentic Sri Lankan experiences.</p>
-          </div>
-          <div className="rounded-xl bg-emerald-50 border border-emerald-100 px-5 py-3 mb-6 text-left">
-            <div className="text-xs font-bold uppercase text-emerald-600 mb-1">Verify your email</div>
-            <p className="text-sm text-emerald-800">We sent a link to <span className="font-semibold">{email}</span>. Click it to verify.</p>
-          </div>
-          <p className="text-xs text-slate-400 mt-4">Already a host? <Link to="/login" className="font-bold text-sky-600 hover:underline">Sign in here</Link></p>
-        </div>
-      </PageWrap>
-    );
-  }
 
   if (step === "host-submitted") {
     return (
@@ -351,21 +321,11 @@ export function Register() {
     );
   }
 
-  // ── HOST multi-step steps ─────────────────────────────────────────────────
-  function HostCard({ title, children }: { title: string; children: React.ReactNode }) {
-    return (
-      <div className="rounded-2xl bg-white/95 p-8 shadow-2xl backdrop-blur-sm">
-        <ProgressBar step={step} />
-        <h1 className="text-xl font-bold text-slate-800 mb-5">{title}</h1>
-        {children}
-      </div>
-    );
-  }
 
   if (step === "host-type") {
     return (
       <PageWrap>
-        <HostCard title="What kind of host are you?">
+        <HostCard step={step} title="What kind of host are you?">
           <p className="text-xs text-slate-500 mb-4">Select all that apply. You can list multiple types of experiences.</p>
           <div className="space-y-2 mb-6">
             {HOST_TYPE_OPTIONS.map((opt) => {
@@ -415,7 +375,7 @@ export function Register() {
   if (step === "business") {
     return (
       <PageWrap>
-        <HostCard title="Business Details">
+        <HostCard step={step} title="Business Details">
           <div className="space-y-4 mb-6">
             <Input label="Outlet / Business Name" value={businessName} onChange={(e) => setBusinessName(e.target.value)} placeholder="e.g. The Beach Shack" />
             <Input label="Business Address" value={businessAddress} onChange={(e) => setBusinessAddress(e.target.value)} placeholder="e.g. 45 Galle Road, Colombo 03" />
@@ -448,7 +408,7 @@ export function Register() {
   if (step === "documents") {
     return (
       <PageWrap>
-        <HostCard title="Business Documents">
+        <HostCard step={step} title="Business Documents">
           <p className="text-xs text-slate-500 mb-4">Upload any available business documents. Items marked with * are required only if applicable.</p>
           <div className="space-y-4 mb-6">
             <FileUploadField label="Business Registration Certificate" hint="If registered with the Companies Act" value={businessDocFile} onChange={setBusinessDocFile} />
@@ -469,7 +429,7 @@ export function Register() {
   if (step === "identity") {
     return (
       <PageWrap>
-        <HostCard title="Identification">
+        <HostCard step={step} title="Identification">
           <p className="text-xs text-slate-500 mb-4">We need to verify your identity. Upload a clear copy of one of the following documents.</p>
           <div className="space-y-4 mb-6">
             <div>
@@ -519,7 +479,7 @@ export function Register() {
   if (step === "banking") {
     return (
       <PageWrap>
-        <HostCard title="Banking Details">
+        <HostCard step={step} title="Banking Details">
           <p className="text-xs text-slate-500 mb-4">We verify your bank account to ensure safe payouts. Upload a copy of your passbook or a recent bank statement.</p>
           <div className="space-y-4 mb-6">
             <FileUploadField label="Bank Passbook or Statement" hint="Must show your name, account number, and bank name" value={bankDocFile} onChange={setBankDocFile} required />
@@ -550,7 +510,7 @@ export function Register() {
     };
     return (
       <PageWrap>
-        <HostCard title="Review Your Application">
+        <HostCard step={step} title="Review Your Application">
           <div className="space-y-3 mb-6 text-sm">
             <div className="bg-slate-50 rounded-xl p-4 space-y-2">
               <div className="text-[10px] font-bold uppercase text-slate-400">Account</div>
@@ -591,15 +551,17 @@ export function Register() {
     );
   }
 
-  // ── Step 1: credentials form (TRAVELER + HOST entry point) ────────────────
+  // ── Step 1: host credentials entry ───────────────────────────────────────
   return (
     <PageWrap>
       <div className="rounded-2xl bg-white/95 p-10 shadow-2xl backdrop-blur-sm">
-        <h1 className="text-2xl font-semibold text-neutral-900">Create account</h1>
-        <p className="mt-1 text-sm text-neutral-500">Join Ceylonify to discover or host experiences</p>
+        <h1 className="text-2xl font-semibold text-neutral-900">Apply as a Host</h1>
+        <p className="mt-1 text-sm text-neutral-500">
+          List and manage experiences on Ceylonify. Requires identity verification and admin approval.
+        </p>
 
         <form
-          onSubmit={role === "TRAVELER" ? onTravelerSubmit : (e) => {
+          onSubmit={(e) => {
             e.preventDefault();
             setErr(null);
             if (password !== confirm) { setErr("Passwords do not match."); return; }
@@ -608,46 +570,24 @@ export function Register() {
           }}
           className="mt-8 space-y-5"
         >
-          {/* Role selector */}
-          <div>
-            <div className="mb-2 text-xs font-bold uppercase text-slate-600">I am a…</div>
-            <div className="grid grid-cols-2 gap-3">
-              {(["TRAVELER", "HOST"] as const).map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => setRole(r)}
-                  className={`py-3 rounded-xl border-2 text-sm font-bold transition-colors ${
-                    role === r
-                      ? "border-brand-500 bg-brand-50 text-brand-700"
-                      : "border-slate-200 text-slate-500 hover:border-slate-300"
-                  }`}
-                >
-                  {r === "TRAVELER" ? "✈️ Traveler" : "🏡 Host"}
-                </button>
-              ))}
-            </div>
-            <p className="mt-2 text-xs text-slate-400">
-              {role === "TRAVELER"
-                ? "Discover experiences via the Ceylonify mobile app."
-                : "List and manage experiences. Requires identity verification and admin approval."}
-            </p>
-          </div>
-
-          <Input label="Email address" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
-          <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
-          <Input label="Confirm Password" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" />
+          <Input label="Email address" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" placeholder="example@email.com" />
+          <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" placeholder="••••••••" />
+          <Input label="Confirm Password" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" placeholder="••••••••" />
 
           {err && <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div>}
 
           <Button type="submit" disabled={loading} className="w-full">
-            {loading ? "Creating…" : role === "TRAVELER" ? "Create account" : "Continue →"}
+            {loading ? "Please wait…" : "Continue →"}
           </Button>
         </form>
 
         <p className="mt-6 text-center text-xs text-neutral-400">
           Already have an account?{" "}
           <Link to="/login" className="font-bold text-sky-600 hover:underline">Sign in</Link>
+        </p>
+        <p className="mt-2 text-center text-xs text-neutral-400">
+          Traveler? Download the{" "}
+          <span className="font-semibold text-neutral-500">Ceylonify mobile app</span> to get started.
         </p>
       </div>
     </PageWrap>

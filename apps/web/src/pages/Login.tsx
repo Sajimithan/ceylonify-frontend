@@ -7,7 +7,7 @@ import { Button } from "../ui/Button";
 
 export function Login() {
   const nav = useNavigate();
-  const [email, setEmail] = useState("host@test.com");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -69,6 +69,7 @@ export function Login() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             autoComplete="email"
+            placeholder="example@email.com"
           />
           <div>
             <Input
@@ -77,6 +78,7 @@ export function Login() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
+              placeholder="••••••••"
             />
             <div className="text-right mt-1">
               <Link
@@ -100,21 +102,17 @@ export function Login() {
         </form>
 
         <p className="mt-6 text-center text-xs text-neutral-400">
-          Don't have an account?{" "}
+          Want to become a host?{" "}
           <Link to="/register" className="font-bold text-sky-600 hover:underline">
-            Create one
+            Apply here
           </Link>
         </p>
 
-        <div className="mt-4 space-y-1 text-xs text-neutral-400">
-          <p>Host: any registered Firebase user</p>
-          <p>Admin: <span className="font-mono">admin@test.com</span></p>
-        </div>
       </div>
 
       {/* Footer */}
       <div className="absolute bottom-6 z-10 text-xs text-white/40">
-        © {new Date().getFullYear()} Ceylonify · Index 220596H
+        © {new Date().getFullYear()} Ceylonify
       </div>
     </div>
   );

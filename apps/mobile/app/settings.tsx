@@ -215,7 +215,6 @@ export default function SettingsScreen() {
                 {/* App Version */}
                 <View style={styles.footer}>
                     <Text style={styles.versionText}>Ceylonify v1.0.0</Text>
-                    <Text style={styles.buildText}>Build 220596H</Text>
                 </View>
             </ScrollView>
         </View>
