@@ -23,6 +23,12 @@ export const ADMIN_CREATE_ADMIN_ACCOUNT = gql`
   }
 `;
 
+export const ADMIN_DELETE_USER = gql`
+  mutation AdminDeleteUser($firebaseUid: String!) {
+    adminDeleteUser(firebaseUid: $firebaseUid)
+  }
+`;
+
 export const ADMIN_ALL_USERS = gql`
   query AdminAllUsers {
     adminAllUsers {

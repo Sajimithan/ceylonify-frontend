@@ -4,7 +4,7 @@ import { useMutation, useQuery } from "@apollo/client/react";
 import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { DashboardLayout } from "../../layouts/DashboardLayout";
 import { Button } from "../../ui/Button";
-import { ADMIN_ALL_USERS, ADMIN_CHANGE_USER_ROLE, ADMIN_UPDATE_SUBSCRIPTION, ADMIN_UPDATE_USER_PHONE, ADMIN_SUSPEND_USER, ADMIN_ACTIVATE_USER, ADMIN_CREATE_ADMIN_ACCOUNT } from "./admin.gql";
+import { ADMIN_ALL_USERS, ADMIN_CHANGE_USER_ROLE, ADMIN_UPDATE_SUBSCRIPTION, ADMIN_UPDATE_USER_PHONE, ADMIN_SUSPEND_USER, ADMIN_ACTIVATE_USER, ADMIN_CREATE_ADMIN_ACCOUNT, ADMIN_DELETE_USER } from "./admin.gql";
 import { ADMIN_PENDING_HOST_APPLICATIONS } from "./host-applications.gql";
 import { ME_QUERY } from "../browse.gql";
 
@@ -77,11 +77,15 @@ export function AdminUsers() {
   const [updatePhone] = useMutation(ADMIN_UPDATE_USER_PHONE);
   const [suspendUser] = useMutation(ADMIN_SUSPEND_USER, { onCompleted: () => refetch() });
   const [activateUser] = useMutation(ADMIN_ACTIVATE_USER, { onCompleted: () => refetch() });
+  const [deleteUser] = useMutation(ADMIN_DELETE_USER);
   const [editingId, setEditingId]     = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState("TRAVELER");
   const [search, setSearch]           = useState("");
   const [editingPhoneUid, setEditingPhoneUid] = useState<string | null>(null);
   const [phoneInput, setPhoneInput]   = useState("");
+
+  const isPremiumUser = (u: { subscriptionExpiresAt?: string | null }) =>
+    !!u.subscriptionExpiresAt && new Date(u.subscriptionExpiresAt) > new Date();
 
   async function handleRoleChange(id: string) {
     if (!editingId) return;
@@ -230,8 +234,8 @@ export function AdminUsers() {
               {/* Status messages */}
               {registerStatus === "success" && (
                 <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-4 space-y-2">
-                  <p className="text-sm font-bold text-emerald-700">✅ Admin account created successfully.</p>
-                  <p className="text-xs text-emerald-600">Share these credentials with the new admin:</p>
+                  <p className="text-sm font-bold text-emerald-700">✅ Admin account created and credentials emailed.</p>
+                  <p className="text-xs text-emerald-600">Login credentials were sent to:</p>
                   <div className="bg-white border border-emerald-200 rounded-lg px-4 py-3 space-y-1">
                     <div className="text-xs text-slate-400 font-semibold uppercase">Email</div>
                     <div className="text-sm font-mono text-slate-700">{adminEmail || "—"}</div>
@@ -251,10 +255,10 @@ export function AdminUsers() {
                 disabled={creating || !adminEmail.trim() || !adminPassword}
                 className="w-full py-2.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-sm rounded-lg transition-colors"
               >
-                {creating ? "Creating…" : "Create Admin Account"}
+                {creating ? "Sending…" : "Create and Send Mail"}
               </button>
               <p className="text-[11px] text-slate-400 text-center">
-                The account is created immediately. Copy the generated password above and share it with the new admin.
+                The account is created and login credentials are emailed to the new admin automatically.
               </p>
             </div>
           )}
@@ -472,31 +476,7 @@ export function AdminUsers() {
                               Edit Role
                             </button>
                             )}
-                            {u.role === "TRAVELER" && (
-                              <button
-                                className="text-[10px] font-bold text-violet-600 hover:text-violet-800 border border-violet-200 hover:bg-violet-50 px-3 py-1 rounded-lg transition-colors disabled:opacity-40"
-                                disabled={updating}
-                                onClick={async () => {
-                                  await changeRole({ variables: { id: u.id, role: "HOST" } });
-                                  await refetch();
-                                }}
-                              >
-                                Grant Host
-                              </button>
-                            )}
-                            {u.role === "HOST" && (
-                              <button
-                                className="text-[10px] font-bold text-slate-500 hover:text-slate-700 border border-slate-200 hover:bg-slate-50 px-3 py-1 rounded-lg transition-colors disabled:opacity-40"
-                                disabled={updating}
-                                onClick={async () => {
-                                  await changeRole({ variables: { id: u.id, role: "TRAVELER" } });
-                                  await refetch();
-                                }}
-                              >
-                                Revoke Host
-                              </button>
-                            )}
-                            {u.role === "TRAVELER" && (
+                            {u.role === "TRAVELER" && !isPremiumUser(u) && (
                               <button
                                 className="text-[10px] font-bold text-amber-600 hover:text-amber-800 border border-amber-200 hover:bg-amber-50 px-3 py-1 rounded-lg transition-colors disabled:opacity-40"
                                 disabled={updatingSub}
@@ -509,7 +489,7 @@ export function AdminUsers() {
                                 Grant Premium
                               </button>
                             )}
-                            {u.role === "TRAVELER" && (
+                            {u.role === "TRAVELER" && isPremiumUser(u) && (
                               <button
                                 className="text-[10px] font-bold text-slate-400 hover:text-slate-600 border border-slate-200 hover:bg-slate-50 px-3 py-1 rounded-lg transition-colors disabled:opacity-40"
                                 disabled={updatingSub}
@@ -543,6 +523,23 @@ export function AdminUsers() {
                                   Suspend
                                 </button>
                               )
+                            )}
+                            {u.firebaseUid !== meData?.me?.firebaseUid && (
+                              <button
+                                className="text-[10px] font-bold text-red-700 hover:text-red-900 border border-red-300 hover:bg-red-50 px-3 py-1 rounded-lg transition-colors"
+                                title="Permanently delete this account"
+                                onClick={async () => {
+                                  if (!confirm(`Permanently delete account for ${u.email ?? u.firebaseUid}? This cannot be undone.`)) return;
+                                  try {
+                                    await deleteUser({ variables: { firebaseUid: u.firebaseUid } });
+                                    await refetch();
+                                  } catch (e) {
+                                    alert((e as Error)?.message ?? "Failed to delete user.");
+                                  }
+                                }}
+                              >
+                                Delete
+                              </button>
                             )}
                           </>
                         )}
