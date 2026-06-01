@@ -9,6 +9,7 @@ import { listenForegroundMessages } from '../../notifications/fcm';
 import { useEffect, useState } from 'react';
 import { useFeatureFlags } from '../../auth/useFeatureFlags';
 import { ShareIcon, XMarkIcon, ClipboardDocumentIcon, CheckIcon } from '@heroicons/react/24/outline';
+import { ConfirmModal } from '../../ui/ConfirmModal';
 
 type Listing = {
   id: string;
@@ -202,16 +203,12 @@ export function MyListings() {
     onCompleted: () => refetch()
   });
   const [sharingListing, setSharingListing] = useState<Listing | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Listing | null>(null);
 
   useEffect(() => {
     listenForegroundMessages();
   }, []);
 
-  async function handleDelete(id: string) {
-    if (confirm("Are you sure you want to delete this listing?")) {
-      await deleteListing({ variables: { id } });
-    }
-  }
 
   async function handleResubmit(l: Listing) {
     if (!confirm("Resubmit this listing for review?")) return;
@@ -352,7 +349,7 @@ export function MyListings() {
                   <Button
                     variant="danger"
                     className="!px-3 !py-1 !text-[10px]"
-                    onClick={() => handleDelete(l.id)}
+                    onClick={() => setDeleteTarget(l)}
                   >
                     Delete
                   </Button>
@@ -381,6 +378,19 @@ export function MyListings() {
         <ShareModal
           listing={sharingListing}
           onClose={() => setSharingListing(null)}
+        />
+      )}
+      {deleteTarget && (
+        <ConfirmModal
+          title="Delete Listing"
+          description="This listing will be permanently deleted and cannot be recovered."
+          detail={deleteTarget.title}
+          confirmLabel="Delete Listing"
+          onConfirm={async () => {
+            await deleteListing({ variables: { id: deleteTarget.id } });
+            setDeleteTarget(null);
+          }}
+          onCancel={() => setDeleteTarget(null)}
         />
       )}
     </DashboardLayout>

@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@apollo/client/react";
-import { MagnifyingGlassIcon, ExclamationTriangleIcon } from "@heroicons/react/24/outline";
+import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
+import { ConfirmModal } from "../../ui/ConfirmModal";
 import { DashboardLayout } from "../../layouts/DashboardLayout";
 import { Button } from "../../ui/Button";
 import { ADMIN_ALL_USERS, ADMIN_CHANGE_USER_ROLE, ADMIN_UPDATE_SUBSCRIPTION, ADMIN_UPDATE_USER_PHONE, ADMIN_SUSPEND_USER, ADMIN_ACTIVATE_USER, ADMIN_CREATE_ADMIN_ACCOUNT, ADMIN_DELETE_USER } from "./admin.gql";
@@ -83,8 +84,6 @@ export function AdminUsers() {
   const [editingPhoneUid, setEditingPhoneUid] = useState<string | null>(null);
   const [phoneInput, setPhoneInput]   = useState("");
   const [deleteTarget, setDeleteTarget] = useState<UserRecord | null>(null);
-  const [deleteError, setDeleteError]   = useState("");
-  const [deleting, setDeleting]         = useState(false);
 
   const isPremiumUser = (u: { subscriptionExpiresAt?: string | null }) =>
     !!u.subscriptionExpiresAt && new Date(u.subscriptionExpiresAt) > new Date();
@@ -109,21 +108,6 @@ export function AdminUsers() {
       await refetch();
     } catch (e) {
       console.error("Failed to update phone", e);
-    }
-  }
-
-  async function handleDeleteUser() {
-    if (!deleteTarget) return;
-    setDeleting(true);
-    setDeleteError("");
-    try {
-      await deleteUser({ variables: { firebaseUid: deleteTarget.firebaseUid } });
-      setDeleteTarget(null);
-      await refetch();
-    } catch (e: unknown) {
-      setDeleteError((e as Error)?.message ?? "Failed to delete user.");
-    } finally {
-      setDeleting(false);
     }
   }
 
@@ -534,50 +518,19 @@ export function AdminUsers() {
         )}
       </div>
 
-      {/* Delete confirmation modal */}
       {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
-            <div className="bg-red-50 border-b border-red-100 px-6 py-5 flex items-start gap-4">
-              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
-                <ExclamationTriangleIcon className="w-5 h-5 text-red-600" />
-              </div>
-              <div>
-                <div className="font-bold text-slate-800 text-base">Delete Account</div>
-                <div className="text-xs text-slate-500 mt-0.5">This action is permanent and cannot be undone.</div>
-              </div>
-            </div>
-            <div className="px-6 py-5 space-y-4">
-              <p className="text-sm text-slate-600">You are about to permanently delete:</p>
-              <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 space-y-0.5">
-                <div className="text-[10px] font-bold uppercase text-slate-400 tracking-wide">Account</div>
-                <div className="text-sm font-mono font-semibold text-slate-700">{deleteTarget.email ?? deleteTarget.firebaseUid}</div>
-                <div className="text-[11px] text-slate-400">{deleteTarget.role}</div>
-              </div>
-              {deleteError && (
-                <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 font-semibold">
-                  {deleteError}
-                </div>
-              )}
-              <div className="flex gap-3 pt-1">
-                <button
-                  onClick={() => { setDeleteTarget(null); setDeleteError(""); }}
-                  disabled={deleting}
-                  className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-40"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleDeleteUser}
-                  disabled={deleting}
-                  className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-bold transition-colors disabled:opacity-40"
-                >
-                  {deleting ? "Deleting…" : "Delete Permanently"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ConfirmModal
+          title="Delete Account"
+          description="This action is permanent and cannot be undone."
+          detail={`${deleteTarget.email ?? deleteTarget.firebaseUid} · ${deleteTarget.role}`}
+          confirmLabel="Delete Permanently"
+          onConfirm={async () => {
+            await deleteUser({ variables: { firebaseUid: deleteTarget.firebaseUid } });
+            setDeleteTarget(null);
+            await refetch();
+          }}
+          onCancel={() => setDeleteTarget(null)}
+        />
       )}
     </DashboardLayout>
   );

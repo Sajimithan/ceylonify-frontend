@@ -4,12 +4,14 @@ import { useQuery, useMutation } from "@apollo/client/react";
 import { useSearchParams } from "react-router-dom";
 import { ME_VERIFICATION_STATUS, DELETE_MY_ACCOUNT, SEND_EMAIL_VERIFICATION, MARK_EMAIL_VERIFIED } from "./premium.gql";
 import { PremiumUpgrade } from "./PremiumUpgrade";
+import { ConfirmModal } from "../ui/ConfirmModal";
 import { signOut } from "firebase/auth";
 import { auth } from "../auth/firebase";
 
 export function TravelerAccount() {
   const { data, refetch } = useQuery(ME_VERIFICATION_STATUS);
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [verifySuccess, setVerifySuccess] = useState(false);
@@ -38,13 +40,6 @@ export function TravelerAccount() {
     setEmailSent(true);
   }
 
-  async function handleDeleteAccount() {
-    if (!confirm("Are you sure you want to permanently delete your account? This cannot be undone.")) return;
-    if (!confirm("All your data (saved listings, itinerary, experiences) will be deleted. Confirm?")) return;
-    await deleteMyAccount();
-    await signOut(auth);
-    window.location.href = "/login";
-  }
 
   const me = data?.me;
   const isPremium = me?.isPremium;
@@ -164,13 +159,27 @@ export function TravelerAccount() {
           <div className="text-sm font-bold text-red-600 mb-1">Danger Zone</div>
           <div className="text-xs text-slate-400 mb-4">Permanently delete your account and all associated data. This action cannot be undone.</div>
           <button
-            onClick={handleDeleteAccount}
+            onClick={() => setShowDeleteModal(true)}
             className="px-5 py-2 rounded-lg border border-red-300 text-red-600 font-bold text-sm hover:bg-red-50 transition-colors"
           >
             Delete Account
           </button>
         </div>
       </div>
+
+      {showDeleteModal && (
+        <ConfirmModal
+          title="Delete Account"
+          description="All your data — saved listings, itinerary, and experiences — will be permanently deleted. This cannot be undone."
+          confirmLabel="Delete My Account"
+          onConfirm={async () => {
+            await deleteMyAccount();
+            await signOut(auth);
+            window.location.href = "/";
+          }}
+          onCancel={() => setShowDeleteModal(false)}
+        />
+      )}
     </DashboardLayout>
   );
 }

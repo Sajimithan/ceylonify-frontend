@@ -14,6 +14,7 @@ import { DELETE_MY_ACCOUNT } from "../premium.gql";
 import { DashboardLayout } from "../../layouts/DashboardLayout";
 import { Input } from "../../ui/Input";
 import { Button } from "../../ui/Button";
+import { ConfirmModal } from "../../ui/ConfirmModal";
 import { ME_QUERY } from "../browse.gql";
 
 const UPDATE_PROFILE = gql`
@@ -84,14 +85,7 @@ export function HostProfile() {
   });
   const [deleteMyAccount] = useMutation(DELETE_MY_ACCOUNT);
   const [updateProfileMutation] = useMutation(UPDATE_PROFILE);
-
-  async function handleDeleteAccount() {
-    if (!confirm("Are you sure you want to permanently delete your account and all your listings?")) return;
-    if (!confirm("This action cannot be undone. Confirm?")) return;
-    await deleteMyAccount();
-    await signOut(auth);
-    window.location.href = "/login";
-  }
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // ── Profile photo ─────────────────────────────────────────────────────────
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -408,13 +402,27 @@ export function HostProfile() {
             Permanently delete your account and all your listings. This action cannot be undone.
           </div>
           <button
-            onClick={handleDeleteAccount}
+            onClick={() => setShowDeleteModal(true)}
             className="px-5 py-2 rounded-lg border border-red-300 text-red-600 font-bold text-sm hover:bg-red-50 transition-colors"
           >
             Delete Account
           </button>
         </div>
       </div>
+
+      {showDeleteModal && (
+        <ConfirmModal
+          title="Delete Account"
+          description="Your account and all your listings will be permanently deleted. This cannot be undone."
+          confirmLabel="Delete My Account"
+          onConfirm={async () => {
+            await deleteMyAccount();
+            await signOut(auth);
+            window.location.href = "/";
+          }}
+          onCancel={() => setShowDeleteModal(false)}
+        />
+      )}
     </DashboardLayout>
   );
 }
