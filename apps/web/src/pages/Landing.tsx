@@ -155,7 +155,7 @@ export function Landing() {
       {/* Footer */}
       <footer className="bg-slate-800 py-8 px-6 text-center">
         <div className="text-slate-400 text-xs">
-          © {new Date().getFullYear()} Ceylonify · Index 220596H
+          © {new Date().getFullYear()} Ceylonify
         </div>
       </footer>
     </div>

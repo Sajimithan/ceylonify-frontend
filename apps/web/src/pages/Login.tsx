@@ -112,7 +112,7 @@ export function Login() {
 
       {/* Footer */}
       <div className="absolute bottom-6 z-10 text-xs text-white/40">
-        © {new Date().getFullYear()} Ceylonify · Index 220596H
+        © {new Date().getFullYear()} Ceylonify
       </div>
     </div>
   );

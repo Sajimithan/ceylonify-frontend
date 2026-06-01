@@ -178,7 +178,7 @@ function PageWrap({ children }: { children: React.ReactNode }) {
         </Link>
       </div>
       <div className="relative z-10 w-full max-w-lg">{children}</div>
-      <div className="absolute bottom-6 z-10 text-xs text-white/40">© {new Date().getFullYear()} Ceylonify · Index 220596H</div>
+      <div className="absolute bottom-6 z-10 text-xs text-white/40">© {new Date().getFullYear()} Ceylonify</div>
     </div>
   );
 }
