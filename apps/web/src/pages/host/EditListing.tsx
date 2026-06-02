@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { gql } from "@apollo/client";
 import { useMutation, useQuery } from "@apollo/client/react";
 import { GET_LISTING, UPDATE_LISTING } from "./listings.gql";
-import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
+import { GoogleMap, Marker, Autocomplete, useJsApiLoader } from "@react-google-maps/api";
 import { MAPS_LIBRARIES } from "../../lib/googleMaps";
 
 const ENHANCE_DESCRIPTION = gql`
@@ -73,6 +73,30 @@ export function EditListing() {
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string,
     libraries: MAPS_LIBRARIES,
   });
+  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+
+  function onPlaceChanged() {
+    const place = autocompleteRef.current?.getPlace();
+    if (!place) return;
+    if (place.name) setPlaceName(place.name);
+    if (place.geometry?.location) {
+      const pLat = place.geometry.location.lat();
+      const pLng = place.geometry.location.lng();
+      setLat(pLat);
+      setLng(pLng);
+      setMapLink(`https://www.google.com/maps/search/?api=1&query=${pLat},${pLng}`);
+    }
+  }
+
+  function geocodeAndFill(pLat: number, pLng: number) {
+    const geocoder = new google.maps.Geocoder();
+    void geocoder.geocode({ location: { lat: pLat, lng: pLng } }, (results, status) => {
+      if (status === 'OK' && results?.[0]) {
+        setPlaceName(results[0].formatted_address);
+        setMapLink(`https://www.google.com/maps/search/?api=1&query=${pLat},${pLng}`);
+      }
+    });
+  }
 
   async function handleEnhance() {
     if (!description.trim()) return;
@@ -352,13 +376,33 @@ export function EditListing() {
           <Card className="mb-6">
             <h6 className="text-slate-400 text-sm mb-6 font-bold uppercase">Location</h6>
             <div className="space-y-4">
-              <Input
-                label="Place Name"
-                hint="e.g. Lotus Tower, Colombo"
-                value={placeName}
-                onChange={(e) => setPlaceName(e.target.value)}
-                placeholder="Name of the venue or area"
-              />
+              {mapsLoaded ? (
+                <label className="block">
+                  <div className="block uppercase text-slate-600 text-xs font-bold mb-2">Place Name</div>
+                  <Autocomplete
+                    onLoad={(ref) => { autocompleteRef.current = ref; }}
+                    onPlaceChanged={onPlaceChanged}
+                    options={{ componentRestrictions: { country: "lk" } }}
+                  >
+                    <input
+                      type="text"
+                      value={placeName}
+                      onChange={(e) => setPlaceName(e.target.value)}
+                      placeholder="e.g. Lotus Tower, Colombo"
+                      className="border-0 px-3 py-3 placeholder-slate-300 text-slate-600 bg-white rounded text-sm shadow focus:outline-none focus:ring w-full ease-linear transition-all duration-150"
+                    />
+                  </Autocomplete>
+                  <div className="mt-2 text-xs text-slate-400 font-semibold">Search by name or click the map to auto-fill</div>
+                </label>
+              ) : (
+                <Input
+                  label="Place Name"
+                  hint="e.g. Lotus Tower, Colombo"
+                  value={placeName}
+                  onChange={(e) => setPlaceName(e.target.value)}
+                  placeholder="Name of the venue or area"
+                />
+              )}
               <Input
                 label="Google Maps Link"
                 hint="Paste the URL from Google Maps (optional)"
@@ -374,14 +418,24 @@ export function EditListing() {
                   mapContainerStyle={{ width: "100%", height: "300px", borderRadius: "10px" }}
                   center={lat !== null && lng !== null ? { lat, lng } : { lat: 7.8731, lng: 80.7718 }}
                   zoom={lat !== null ? 14 : 8}
-                  onClick={(e) => { if (e.latLng) { setLat(e.latLng.lat()); setLng(e.latLng.lng()); } }}
+                  onClick={(e) => {
+                    if (!e.latLng) return;
+                    const pLat = e.latLng.lat(), pLng = e.latLng.lng();
+                    setLat(pLat); setLng(pLng);
+                    geocodeAndFill(pLat, pLng);
+                  }}
                   options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false }}
                 >
                   {lat !== null && lng !== null && (
                     <Marker
                       position={{ lat, lng }}
                       draggable
-                      onDragEnd={(e) => { if (e.latLng) { setLat(e.latLng.lat()); setLng(e.latLng.lng()); } }}
+                      onDragEnd={(e) => {
+                        if (!e.latLng) return;
+                        const pLat = e.latLng.lat(), pLng = e.latLng.lng();
+                        setLat(pLat); setLng(pLng);
+                        geocodeAndFill(pLat, pLng);
+                      }}
                     />
                   )}
                 </GoogleMap>

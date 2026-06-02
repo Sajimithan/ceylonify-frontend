@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { createUserWithEmailAndPassword, sendEmailVerification } from "firebase/auth";
 import { gql } from "@apollo/client";
 import { useMutation } from "@apollo/client/react";
@@ -109,11 +109,13 @@ function FileUploadField({
 }
 
 function BusinessMapPicker({
-  lat, lng, onPick,
+  lat, lng, address, onPick, onAddressChange,
 }: {
   lat: number | null;
   lng: number | null;
+  address: string;
   onPick: (lat: number, lng: number) => void;
+  onAddressChange: (address: string) => void;
 }) {
   const { isLoaded } = useJsApiLoader({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string,
@@ -121,15 +123,27 @@ function BusinessMapPicker({
   });
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
   const center = lat && lng ? { lat, lng } : { lat: 6.9271, lng: 79.8612 };
-  const onLoad = useCallback(() => {}, []);
 
   function onPlaceChanged() {
     const place = autocompleteRef.current?.getPlace();
-    if (!place?.geometry?.location) return;
-    onPick(place.geometry.location.lat(), place.geometry.location.lng());
+    if (!place) return;
+    const addr = place.formatted_address ?? place.name ?? '';
+    if (addr) onAddressChange(addr);
+    if (place.geometry?.location) {
+      onPick(place.geometry.location.lat(), place.geometry.location.lng());
+    }
   }
 
-  if (!isLoaded) return <div className="h-40 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 text-xs">Loading map…</div>;
+  function geocodeLatLng(pLat: number, pLng: number) {
+    const geocoder = new google.maps.Geocoder();
+    void geocoder.geocode({ location: { lat: pLat, lng: pLng } }, (results, status) => {
+      if (status === 'OK' && results?.[0]) {
+        onAddressChange(results[0].formatted_address);
+      }
+    });
+  }
+
+  if (!isLoaded) return <div className="h-48 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 text-xs">Loading map…</div>;
 
   return (
     <div className="space-y-2">
@@ -140,7 +154,9 @@ function BusinessMapPicker({
       >
         <input
           type="text"
-          placeholder="Search for your business location in Sri Lanka…"
+          value={address}
+          onChange={(e) => onAddressChange(e.target.value)}
+          placeholder="e.g. 45 Galle Road, Colombo 03"
           className="border-0 px-3 py-3 placeholder-slate-300 text-slate-600 bg-white rounded text-sm shadow focus:outline-none focus:ring w-full ease-linear transition-all duration-150"
         />
       </Autocomplete>
@@ -148,15 +164,28 @@ function BusinessMapPicker({
         mapContainerClassName="w-full h-48 rounded-xl shadow"
         center={center}
         zoom={lat ? 15 : 11}
-        onLoad={onLoad}
         onClick={(e) => {
-          if (e.latLng) onPick(e.latLng.lat(), e.latLng.lng());
+          if (!e.latLng) return;
+          const pLat = e.latLng.lat(), pLng = e.latLng.lng();
+          onPick(pLat, pLng);
+          geocodeLatLng(pLat, pLng);
         }}
         options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false }}
       >
-        {lat && lng && <Marker position={{ lat, lng }} />}
+        {lat && lng && (
+          <Marker
+            position={{ lat, lng }}
+            draggable
+            onDragEnd={(e) => {
+              if (!e.latLng) return;
+              const pLat = e.latLng.lat(), pLng = e.latLng.lng();
+              onPick(pLat, pLng);
+              geocodeLatLng(pLat, pLng);
+            }}
+          />
+        )}
       </GoogleMap>
-      <p className="text-[10px] text-slate-400">Search above or click on the map to pin your exact location</p>
+      <p className="text-[10px] text-slate-400">Type an address to search, or click / drag the pin on the map</p>
     </div>
   );
 }
@@ -378,10 +407,17 @@ export function Register() {
         <HostCard step={step} title="Business Details">
           <div className="space-y-4 mb-6">
             <Input label="Outlet / Business Name" value={businessName} onChange={(e) => setBusinessName(e.target.value)} placeholder="e.g. The Beach Shack" />
-            <Input label="Business Address" value={businessAddress} onChange={(e) => setBusinessAddress(e.target.value)} placeholder="e.g. 45 Galle Road, Colombo 03" />
             <div>
-              <div className="text-xs font-bold text-slate-600 mb-1.5">Pin Your Exact Location <span className="text-red-500">*</span></div>
-              <BusinessMapPicker lat={businessLat} lng={businessLng} onPick={(lat, lng) => { setBusinessLat(lat); setBusinessLng(lng); }} />
+              <div className="text-xs font-bold text-slate-600 mb-1.5">
+                Business Address & Location <span className="text-red-500">*</span>
+              </div>
+              <BusinessMapPicker
+                lat={businessLat}
+                lng={businessLng}
+                address={businessAddress}
+                onPick={(lat, lng) => { setBusinessLat(lat); setBusinessLng(lng); }}
+                onAddressChange={setBusinessAddress}
+              />
             </div>
             <Input label="Mobile / Fixed Line Number" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="e.g. +94 77 123 4567" />
           </div>

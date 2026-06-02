@@ -116,6 +116,16 @@ export function CreateListing() {
     }
   }
 
+  function geocodeAndFill(pLat: number, pLng: number) {
+    const geocoder = new google.maps.Geocoder();
+    void geocoder.geocode({ location: { lat: pLat, lng: pLng } }, (results, status) => {
+      if (status === 'OK' && results?.[0]) {
+        setPlaceName(results[0].formatted_address);
+        setMapLink(`https://www.google.com/maps/search/?api=1&query=${pLat},${pLng}`);
+      }
+    });
+  }
+
   function applyTemplate(template: ListingTemplate) {
     setTitle(template.title);
     setDescription(template.description);
@@ -426,25 +436,9 @@ export function CreateListing() {
           <Card className="mb-6">
             <h6 className="text-slate-400 text-sm mb-6 font-bold uppercase">Location</h6>
             <div className="space-y-4">
-              <Input
-                label="Place Name"
-                hint="e.g. Lotus Tower, Colombo"
-                value={placeName}
-                onChange={(e) => setPlaceName(e.target.value)}
-                placeholder="Name of the venue or area"
-              />
-              <Input
-                label="Google Maps Link"
-                hint="Paste the URL from Google Maps (optional)"
-                value={mapLink}
-                onChange={(e) => setMapLink(e.target.value)}
-                placeholder="https://maps.app.goo.gl/..."
-              />
-              {mapsLoaded && (
+              {mapsLoaded ? (
                 <label className="block">
-                  <div className="mb-2 uppercase text-slate-600 text-xs font-bold">
-                    Search by Place Name
-                  </div>
+                  <div className="block uppercase text-slate-600 text-xs font-bold mb-2">Place Name</div>
                   <Autocomplete
                     onLoad={(ref) => { autocompleteRef.current = ref; }}
                     onPlaceChanged={onPlaceChanged}
@@ -452,12 +446,30 @@ export function CreateListing() {
                   >
                     <input
                       type="text"
-                      placeholder="Search for a place in Sri Lanka…"
+                      value={placeName}
+                      onChange={(e) => setPlaceName(e.target.value)}
+                      placeholder="e.g. Lotus Tower, Colombo"
                       className="border-0 px-3 py-3 placeholder-slate-300 text-slate-600 bg-white rounded text-sm shadow focus:outline-none focus:ring w-full ease-linear transition-all duration-150"
                     />
                   </Autocomplete>
+                  <div className="mt-2 text-xs text-slate-400 font-semibold">Search by name or click the map to auto-fill</div>
                 </label>
+              ) : (
+                <Input
+                  label="Place Name"
+                  hint="e.g. Lotus Tower, Colombo"
+                  value={placeName}
+                  onChange={(e) => setPlaceName(e.target.value)}
+                  placeholder="Name of the venue or area"
+                />
               )}
+              <Input
+                label="Google Maps Link"
+                hint="Paste the URL from Google Maps (optional)"
+                value={mapLink}
+                onChange={(e) => setMapLink(e.target.value)}
+                placeholder="https://maps.app.goo.gl/..."
+              />
               <p className="text-xs text-slate-500">
                 Click anywhere on the map to drop a pin, or drag the marker to fine-tune.
               </p>
@@ -466,14 +478,24 @@ export function CreateListing() {
                   mapContainerStyle={{ width: "100%", height: "300px", borderRadius: "10px" }}
                   center={lat !== null && lng !== null ? { lat, lng } : { lat: 7.8731, lng: 80.7718 }}
                   zoom={lat !== null ? 14 : 8}
-                  onClick={(e) => { if (e.latLng) { setLat(e.latLng.lat()); setLng(e.latLng.lng()); } }}
+                  onClick={(e) => {
+                    if (!e.latLng) return;
+                    const pLat = e.latLng.lat(), pLng = e.latLng.lng();
+                    setLat(pLat); setLng(pLng);
+                    geocodeAndFill(pLat, pLng);
+                  }}
                   options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false }}
                 >
                   {lat !== null && lng !== null && (
                     <Marker
                       position={{ lat, lng }}
                       draggable
-                      onDragEnd={(e) => { if (e.latLng) { setLat(e.latLng.lat()); setLng(e.latLng.lng()); } }}
+                      onDragEnd={(e) => {
+                        if (!e.latLng) return;
+                        const pLat = e.latLng.lat(), pLng = e.latLng.lng();
+                        setLat(pLat); setLng(pLng);
+                        geocodeAndFill(pLat, pLng);
+                      }}
                     />
                   )}
                 </GoogleMap>
