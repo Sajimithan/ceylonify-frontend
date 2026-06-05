@@ -2,6 +2,7 @@ import { gql } from "@apollo/client";
 import { useQuery } from "@apollo/client/react";
 import { DashboardLayout } from "../../layouts/DashboardLayout";
 import { Card } from "../../ui/Card";
+import { useSmartPoll } from "../../hooks/useSmartPoll";
 
 const ADMIN_AUDIT_LOGS = gql`
   query AdminAuditLogs {
@@ -33,9 +34,10 @@ function actionColor(action: string) {
 }
 
 export function AdminAuditLogs() {
-  const { data, loading, error } = useQuery<{ adminAuditLogs: AuditLog[] }>(ADMIN_AUDIT_LOGS, {
-    pollInterval: 30000,
+  const { data, loading, error, startPolling, stopPolling } = useQuery<{ adminAuditLogs: AuditLog[] }>(ADMIN_AUDIT_LOGS, {
+    fetchPolicy: "cache-and-network",
   });
+  useSmartPoll(startPolling, stopPolling, 30_000);
 
   const logs = data?.adminAuditLogs ?? [];
 
@@ -45,7 +47,7 @@ export function AdminAuditLogs() {
       subtitle="Admin action history"
     >
       <div className="mx-auto w-full max-w-4xl space-y-3">
-        {loading && (
+        {loading && !data && (
           <div className="text-center py-12 text-slate-400 font-semibold">Loading audit logs…</div>
         )}
         {error && (

@@ -195,7 +195,7 @@ function ShareModal({
 
 export function MyListings() {
   const { data, loading, error, refetch, startPolling, stopPolling } = useQuery<MyListingsData>(MY_LISTINGS, {
-    fetchPolicy: "network-only",
+    fetchPolicy: "cache-and-network",
   });
   useSmartPoll(startPolling, stopPolling, 10_000);
   const { isEnabledFor } = useFeatureFlags();
@@ -248,7 +248,7 @@ export function MyListings() {
       }
     >
       <div className="mx-auto w-full max-w-7xl">
-        {loading ? (
+        {loading && !data ? (
           <div className="text-sm text-slate-500 font-semibold mb-4">Loading listings...</div>
         ) : null}
 

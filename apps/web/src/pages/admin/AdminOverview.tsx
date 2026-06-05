@@ -42,7 +42,7 @@ type StatsData = {
 
 export function AdminOverview() {
   const { data, loading, error, refetch, startPolling, stopPolling } = useQuery<StatsData>(ADMIN_STATS, {
-    fetchPolicy: "network-only",
+    fetchPolicy: "cache-and-network",
   });
   useSmartPoll(startPolling, stopPolling, 15_000);
 
@@ -121,7 +121,7 @@ export function AdminOverview() {
       }
     >
       <div className="mx-auto w-full max-w-7xl">
-        {loading && (
+        {loading && !data && (
           <div className="bg-white rounded-xl shadow p-8 text-center text-slate-400 font-semibold mb-6">
             Loading stats…
           </div>

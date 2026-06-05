@@ -78,7 +78,8 @@ export function EditListing() {
   function onPlaceChanged() {
     const place = autocompleteRef.current?.getPlace();
     if (!place) return;
-    if (place.name) setPlaceName(place.name);
+    const name = place.name || place.formatted_address || "";
+    if (name) setPlaceName(name);
     if (place.geometry?.location) {
       const pLat = place.geometry.location.lat();
       const pLng = place.geometry.location.lng();

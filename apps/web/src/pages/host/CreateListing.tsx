@@ -76,6 +76,31 @@ export function CreateListing() {
   const [templateSaved, setTemplateSaved] = useState(false);
 
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  async function searchByName() {
+    if (!placeName.trim() || !mapsLoaded) return;
+    setSearching(true);
+    setSearchError(null);
+    const geocoder = new google.maps.Geocoder();
+    geocoder.geocode(
+      { address: placeName.trim() + ", Sri Lanka" },
+      (results, status) => {
+        setSearching(false);
+        if (status === "OK" && results?.[0]) {
+          const loc = results[0].geometry.location;
+          const pLat = loc.lat(), pLng = loc.lng();
+          setLat(pLat);
+          setLng(pLng);
+          setPlaceName(results[0].formatted_address);
+          setMapLink(`https://www.google.com/maps/search/?api=1&query=${pLat},${pLng}`);
+        } else {
+          setSearchError("Place not found. Try a more specific name.");
+        }
+      },
+    );
+  }
 
   // Load templates scoped to this user's account
   useEffect(() => {
@@ -106,7 +131,8 @@ export function CreateListing() {
   function onPlaceChanged() {
     const place = autocompleteRef.current?.getPlace();
     if (!place) return;
-    if (place.name) setPlaceName(place.name);
+    const name = place.name || place.formatted_address || "";
+    if (name) setPlaceName(name);
     if (place.geometry?.location) {
       const pLat = place.geometry.location.lat();
       const pLng = place.geometry.location.lng();
@@ -436,33 +462,51 @@ export function CreateListing() {
           <Card className="mb-6">
             <h6 className="text-slate-400 text-sm mb-6 font-bold uppercase">Location</h6>
             <div className="space-y-4">
-              {mapsLoaded ? (
-                <label className="block">
-                  <div className="block uppercase text-slate-600 text-xs font-bold mb-2">Place Name</div>
-                  <Autocomplete
-                    onLoad={(ref) => { autocompleteRef.current = ref; }}
-                    onPlaceChanged={onPlaceChanged}
-                    options={{ componentRestrictions: { country: "lk" } }}
-                  >
+              <div className="block">
+                <div className="block uppercase text-slate-600 text-xs font-bold mb-2">Place Name</div>
+                <div className="flex gap-2">
+                  {mapsLoaded ? (
+                    <Autocomplete
+                      onLoad={(ref) => { autocompleteRef.current = ref; }}
+                      onPlaceChanged={onPlaceChanged}
+                      options={{ componentRestrictions: { country: "lk" } }}
+                      className="flex-1"
+                    >
+                      <input
+                        type="text"
+                        value={placeName}
+                        onChange={(e) => { setPlaceName(e.target.value); setSearchError(null); }}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void searchByName(); } }}
+                        placeholder="e.g. Lotus Tower, Colombo"
+                        className="border-0 px-3 py-3 placeholder-slate-300 text-slate-600 bg-white rounded text-sm shadow focus:outline-none focus:ring w-full ease-linear transition-all duration-150"
+                      />
+                    </Autocomplete>
+                  ) : (
                     <input
                       type="text"
                       value={placeName}
-                      onChange={(e) => setPlaceName(e.target.value)}
+                      onChange={(e) => { setPlaceName(e.target.value); setSearchError(null); }}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void searchByName(); } }}
                       placeholder="e.g. Lotus Tower, Colombo"
-                      className="border-0 px-3 py-3 placeholder-slate-300 text-slate-600 bg-white rounded text-sm shadow focus:outline-none focus:ring w-full ease-linear transition-all duration-150"
+                      className="flex-1 border-0 px-3 py-3 placeholder-slate-300 text-slate-600 bg-white rounded text-sm shadow focus:outline-none focus:ring ease-linear transition-all duration-150"
                     />
-                  </Autocomplete>
-                  <div className="mt-2 text-xs text-slate-400 font-semibold">Search by name or click the map to auto-fill</div>
-                </label>
-              ) : (
-                <Input
-                  label="Place Name"
-                  hint="e.g. Lotus Tower, Colombo"
-                  value={placeName}
-                  onChange={(e) => setPlaceName(e.target.value)}
-                  placeholder="Name of the venue or area"
-                />
-              )}
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void searchByName()}
+                    disabled={!placeName.trim() || searching || !mapsLoaded}
+                    className="shrink-0 px-4 py-2 bg-sky-500 hover:bg-sky-600 disabled:opacity-40 text-white text-xs font-bold rounded shadow transition-colors"
+                  >
+                    {searching ? "…" : "Search"}
+                  </button>
+                </div>
+                {searchError && (
+                  <p className="mt-1 text-xs text-red-500 font-semibold">{searchError}</p>
+                )}
+                <div className="mt-2 text-xs text-slate-400 font-semibold">
+                  Type a place name and press Search or Enter · or click the map to auto-fill
+                </div>
+              </div>
               <Input
                 label="Google Maps Link"
                 hint="Paste the URL from Google Maps (optional)"

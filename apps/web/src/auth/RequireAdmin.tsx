@@ -11,7 +11,7 @@ export function RequireAdmin({ children }: { children: React.ReactNode }) {
   const { user, loading: authLoading } = useAuth();
   const { data, loading: meLoading, error: meError } = useQuery(ME_QUERY, {
     skip: !user,
-    fetchPolicy: "network-only",
+    fetchPolicy: "cache-first",
   });
 
   useEffect(() => {
@@ -20,7 +20,7 @@ export function RequireAdmin({ children }: { children: React.ReactNode }) {
     }
   }, [meError, navigate]);
 
-  if (authLoading || (user && meLoading)) {
+  if (authLoading || (user && meLoading && !data)) {
     return (
       <div className="flex min-h-screen items-center justify-center text-slate-400 text-sm font-semibold">
         Loading…

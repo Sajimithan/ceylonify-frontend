@@ -367,7 +367,7 @@ function ListingReviewModal({
 export function AdminPendingListings() {
   const { data, loading, error, refetch, startPolling, stopPolling } = useQuery<{ pendingListings: Listing[] }>(
     PENDING_LISTINGS,
-    { fetchPolicy: "network-only" }
+    { fetchPolicy: "cache-and-network" }
   );
   useSmartPoll(startPolling, stopPolling, 10_000);
   const { data: usersData } = useQuery<{ adminAllUsers: UserRecord[] }>(ADMIN_ALL_USERS);
@@ -418,7 +418,7 @@ export function AdminPendingListings() {
       }
     >
       <div className="mx-auto w-full max-w-7xl">
-        {loading && (
+        {loading && !data && (
           <div className="text-sm text-slate-500 font-semibold mb-4">
             Loading pending listings…
           </div>

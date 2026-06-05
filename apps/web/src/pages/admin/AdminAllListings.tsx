@@ -329,7 +329,7 @@ type FilterStatus = "ALL" | "PENDING" | "APPROVED" | "REJECTED";
 
 export function AdminAllListings() {
   const { data, loading, error, refetch, startPolling, stopPolling } = useQuery<{ adminAllListings: Listing[] }>(ADMIN_ALL_LISTINGS, {
-    fetchPolicy: "network-only",
+    fetchPolicy: "cache-and-network",
   });
   useSmartPoll(startPolling, stopPolling, 15_000);
   const { data: usersData } = useQuery<{ adminAllUsers: UserRecord[] }>(ADMIN_ALL_USERS);
@@ -395,7 +395,7 @@ export function AdminAllListings() {
           </div>
         </div>
 
-        {loading && <div className="text-slate-500 font-bold">Loading listings…</div>}
+        {loading && !data && <div className="text-slate-500 font-bold">Loading listings…</div>}
         {error && <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700 font-bold">{error.message}</div>}
 
         {!loading && filtered.length === 0 && (

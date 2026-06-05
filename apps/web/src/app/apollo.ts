@@ -36,6 +36,13 @@ export const apolloClient = new ApolloClient({
       Query: {
         fields: {
           me: { merge: true },
+          myListings: { merge: false },
+          adminAllListings: { merge: false },
+          pendingListings: { merge: false },
+          adminAllUsers: { merge: false },
+          adminPendingHostApplications: { merge: false },
+          adminAuditLogs: { merge: false },
+          myNotifications: { merge: false },
         },
       },
     },

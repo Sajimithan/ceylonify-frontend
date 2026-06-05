@@ -254,7 +254,7 @@ function ApplicationCard({
 export function AdminHostApplications() {
   const { data, loading, error, refetch, startPolling, stopPolling } = useQuery<{ adminPendingHostApplications: HostApplication[] }>(
     ADMIN_PENDING_HOST_APPLICATIONS,
-    { fetchPolicy: "network-only" }
+    { fetchPolicy: "cache-and-network" }
   );
   useSmartPoll(startPolling, stopPolling, 10_000);
 
@@ -284,7 +284,7 @@ export function AdminHostApplications() {
       }
     >
       <div className="mx-auto w-full max-w-4xl">
-        {loading && (
+        {loading && !data && (
           <div className="text-sm text-slate-500 font-semibold mb-4">Loading applications…</div>
         )}
 

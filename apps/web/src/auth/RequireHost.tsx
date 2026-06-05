@@ -99,14 +99,14 @@ export function RequireHost({ children }: { children: React.ReactNode }) {
 
   const { data: meData, loading: meLoading, error: meError } = useQuery(ME_QUERY, {
     skip: !user,
-    fetchPolicy: "network-only",
+    fetchPolicy: "cache-first",
   });
 
   const role = meData?.me?.role;
 
   const { data: appData, loading: appLoading } = useQuery(MY_HOST_APPLICATION, {
     skip: !user || role !== "TRAVELER",
-    fetchPolicy: "network-only",
+    fetchPolicy: "cache-first",
   });
 
   useEffect(() => {
@@ -115,7 +115,7 @@ export function RequireHost({ children }: { children: React.ReactNode }) {
     }
   }, [meError, navigate]);
 
-  if (authLoading || (user && meLoading)) {
+  if (authLoading || (user && meLoading && !meData)) {
     return (
       <div className="flex min-h-screen items-center justify-center text-slate-400 text-sm font-semibold">
         Loading…
@@ -134,7 +134,7 @@ export function RequireHost({ children }: { children: React.ReactNode }) {
   }
 
   if (role === "TRAVELER") {
-    if (appLoading) {
+    if (appLoading && !appData) {
       return (
         <div className="flex min-h-screen items-center justify-center text-slate-400 text-sm font-semibold">
           Checking application status…

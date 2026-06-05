@@ -177,7 +177,7 @@ export function ListingDetail() {
   const { data: listingData, loading, startPolling, stopPolling } = useQuery(GET_LISTING_DETAIL, {
     variables: { id },
     skip: !id,
-    fetchPolicy: "network-only",
+    fetchPolicy: "cache-and-network",
   });
   useSmartPoll(startPolling, stopPolling, 15_000);
   const { data: meData } = useQuery(ME_QUERY);

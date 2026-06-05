@@ -59,12 +59,12 @@ export function AdminUsers() {
   const isSuperAdmin: boolean = meData?.me?.isSuperAdmin ?? false;
 
   const { data, loading, error, refetch, startPolling, stopPolling } = useQuery<UsersData>(ADMIN_ALL_USERS, {
-    fetchPolicy: "network-only",
+    fetchPolicy: "cache-and-network",
   });
   useSmartPoll(startPolling, stopPolling, 30_000);
   const { data: appsData } = useQuery<{ adminPendingHostApplications: { firebaseUid: string }[] }>(
     ADMIN_PENDING_HOST_APPLICATIONS,
-    { fetchPolicy: "network-only" },
+    { fetchPolicy: "cache-and-network" },
   );
   const pendingUids = new Set((appsData?.adminPendingHostApplications ?? []).map((a) => a.firebaseUid));
 
@@ -153,7 +153,7 @@ export function AdminUsers() {
       }
     >
       <div className="mx-auto w-full max-w-7xl">
-        {loading && (
+        {loading && !data && (
           <div className="bg-white rounded-xl shadow p-8 text-center text-slate-400 font-semibold mb-4">
             Loading users…
           </div>

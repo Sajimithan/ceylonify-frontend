@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useSmartPoll } from "../hooks/useSmartPoll";
 import { useQuery, useMutation } from "@apollo/client/react";
 import { useNavigate } from "react-router-dom";
 import { BellIcon } from "@heroicons/react/24/outline";
@@ -64,10 +65,11 @@ export function NotificationBell() {
   const containerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
-  const { data, refetch } = useQuery<{ myNotifications: AppNotification[] }>(
+  const { data, refetch, startPolling, stopPolling } = useQuery<{ myNotifications: AppNotification[] }>(
     MY_NOTIFICATIONS,
-    { pollInterval: 30_000, fetchPolicy: "network-only" }
+    { fetchPolicy: "cache-and-network" }
   );
+  useSmartPoll(startPolling, stopPolling, 30_000);
 
   const [markRead] = useMutation(MARK_NOTIFICATION_READ, { onCompleted: () => refetch() });
   const [markAll] = useMutation(MARK_ALL_NOTIFICATIONS_READ, { onCompleted: () => refetch() });
