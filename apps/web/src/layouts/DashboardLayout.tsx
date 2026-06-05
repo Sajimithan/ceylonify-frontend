@@ -28,6 +28,7 @@ import {
   CreditCardIcon,
   CalendarDaysIcon,
   MegaphoneIcon,
+  ChatBubbleLeftRightIcon,
 } from "@heroicons/react/24/outline";
 
 const NAV_ICONS: Record<string, React.ElementType> = {
@@ -50,6 +51,7 @@ const NAV_ICONS: Record<string, React.ElementType> = {
   "/admin/audit-logs":         ClockIcon,
   "/admin/features":           Cog6ToothIcon,
   "/admin/announcements":      MegaphoneIcon,
+  "/admin/support":            ChatBubbleLeftRightIcon,
 };
 
 function NavLink({
@@ -230,6 +232,7 @@ export function DashboardLayout({
                 <NavLink to="/admin/audit-logs" onNav={closeSidebar}>Audit Logs</NavLink>
                 <NavLink to="/admin/features" onNav={closeSidebar}>Feature Control</NavLink>
                 <NavLink to="/admin/announcements" onNav={closeSidebar}>Announcements</NavLink>
+                <NavLink to="/admin/support" onNav={closeSidebar}>User Support</NavLink>
                 <NavLink to="/host/profile" onNav={closeSidebar}>Profile & Settings</NavLink>
               </ul>
             </div>

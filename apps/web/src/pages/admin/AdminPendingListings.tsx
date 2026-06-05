@@ -29,6 +29,7 @@ type Listing = {
   placeName?: string;
   status: string;
   isRepost?: boolean;
+  rejectionReason?: string;
   suspensionReason?: string;
   createdAt: string;
   lat?: number;
@@ -269,6 +270,15 @@ function ListingReviewModal({
               {listing.description}
             </p>
           </div>
+
+          {/* Previous rejection reason — shown for re-submitted listings */}
+          {listing.isRepost && listing.rejectionReason && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-3">
+              <p className="text-xs font-bold text-red-700 mb-1">❌ Previous Rejection Reason</p>
+              <p className="text-sm text-red-700 leading-relaxed">{listing.rejectionReason}</p>
+              <p className="text-[10px] text-red-400 mt-1.5">The host has edited and resubmitted this listing after it was rejected.</p>
+            </div>
+          )}
 
           {/* Previous suspension reason — shown for re-submitted listings */}
           {listing.isRepost && listing.suspensionReason && (

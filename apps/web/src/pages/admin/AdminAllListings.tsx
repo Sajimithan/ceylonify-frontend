@@ -195,11 +195,16 @@ function ListingDetailModal({
             <p className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">{listing.description}</p>
           </div>
 
-          {/* Rejection reason (if rejected) */}
-          {listing.status === "REJECTED" && listing.rejectionReason && (
+          {/* Rejection reason — shown when rejected, or as history when resubmitted after rejection */}
+          {listing.rejectionReason && (listing.status === "REJECTED" || (listing.isRepost && listing.status === "PENDING")) && (
             <div className="bg-red-50 border border-red-200 rounded-xl p-3">
-              <p className="text-xs font-bold text-red-700 mb-1">Rejection Reason</p>
+              <p className="text-xs font-bold text-red-700 mb-1">
+                {listing.isRepost && listing.status === "PENDING" ? "❌ Previous Rejection Reason" : "Rejection Reason"}
+              </p>
               <p className="text-sm text-red-600">{listing.rejectionReason}</p>
+              {listing.isRepost && listing.status === "PENDING" && (
+                <p className="text-[10px] text-red-400 mt-1.5">The host has edited and resubmitted this listing after it was rejected.</p>
+              )}
             </div>
           )}
 

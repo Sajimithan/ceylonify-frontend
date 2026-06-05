@@ -16,6 +16,7 @@ import { Input } from "../../ui/Input";
 import { Button } from "../../ui/Button";
 import { ConfirmModal } from "../../ui/ConfirmModal";
 import { ME_QUERY } from "../browse.gql";
+import { ContactSupportSection } from "../../ui/ContactSupportSection";
 
 const UPDATE_PROFILE = gql`
   mutation UpdateProfile($displayName: String, $avatarUrl: String) {
@@ -394,6 +395,9 @@ export function HostProfile() {
             </Button>
           </form>
         </div>
+
+        {/* Contact Support */}
+        <ContactSupportSection />
 
         {/* Danger Zone */}
         <div className="bg-white rounded-2xl shadow p-7 border border-red-100">

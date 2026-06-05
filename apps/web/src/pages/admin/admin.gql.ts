@@ -127,6 +127,39 @@ export const ADMIN_UPDATE_USER_PHONE = gql`
   }
 `;
 
+export const ADMIN_ALL_SUPPORT_TICKETS = gql`
+  query AdminAllSupportTickets {
+    adminAllSupportTickets {
+      id
+      subject
+      message
+      status
+      createdAt
+      userEmail
+      userDisplayName
+      replies {
+        id
+        fromAdmin
+        senderUid
+        message
+        createdAt
+      }
+    }
+  }
+`;
+
+export const ADMIN_REPLY_TO_SUPPORT_TICKET = gql`
+  mutation AdminReplyToSupportTicket($ticketId: String!, $message: String!) {
+    adminReplyToSupportTicket(ticketId: $ticketId, message: $message)
+  }
+`;
+
+export const ADMIN_CLOSE_SUPPORT_TICKET = gql`
+  mutation AdminCloseSupportTicket($ticketId: String!) {
+    adminCloseSupportTicket(ticketId: $ticketId)
+  }
+`;
+
 export const ADMIN_ALL_LISTINGS = gql`
   query AdminAllListings {
     adminAllListings {

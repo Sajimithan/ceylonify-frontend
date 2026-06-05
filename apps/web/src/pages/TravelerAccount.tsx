@@ -5,6 +5,7 @@ import { useSearchParams } from "react-router-dom";
 import { ME_VERIFICATION_STATUS, DELETE_MY_ACCOUNT, SEND_EMAIL_VERIFICATION, MARK_EMAIL_VERIFIED } from "./premium.gql";
 import { PremiumUpgrade } from "./PremiumUpgrade";
 import { ConfirmModal } from "../ui/ConfirmModal";
+import { ContactSupportSection } from "../ui/ContactSupportSection";
 import { signOut } from "firebase/auth";
 import { auth } from "../auth/firebase";
 
@@ -153,6 +154,9 @@ export function TravelerAccount() {
             </div>
           </div>
         </div>
+
+        {/* Contact Support */}
+        <ContactSupportSection />
 
         {/* Danger zone */}
         <div className="bg-white rounded-2xl shadow-lg p-7 border border-red-100">

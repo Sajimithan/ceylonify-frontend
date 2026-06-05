@@ -13,6 +13,7 @@ export const PENDING_LISTINGS = gql`
       placeName
       status
       isRepost
+      rejectionReason
       suspensionReason
       createdAt
       lat

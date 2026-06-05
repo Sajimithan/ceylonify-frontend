@@ -34,6 +34,7 @@ import { AdminUserDetail } from "../pages/admin/AdminUserDetail";
 import { AdminAllListings } from "../pages/admin/AdminAllListings";
 import { AdminAnnouncements } from "../pages/admin/AdminAnnouncements";
 import { AdminReports } from "../pages/admin/AdminReports";
+import { AdminSupport } from "../pages/admin/AdminSupport";
 import { AdminAuditLogs } from "../pages/admin/AdminAuditLogs";
 import { AdminHostApplications } from "../pages/admin/AdminHostApplications";
 import { AdminFeatureFlags } from "../pages/admin/AdminFeatureFlags";
@@ -140,5 +141,9 @@ export const router = createBrowserRouter([
   {
     path: "/admin/announcements",
     element: <RequireAdmin><AdminAnnouncements /></RequireAdmin>,
+  },
+  {
+    path: "/admin/support",
+    element: <RequireAdmin><AdminSupport /></RequireAdmin>,
   },
 ]);
