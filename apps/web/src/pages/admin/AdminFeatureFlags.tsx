@@ -12,6 +12,8 @@ type FeatureFlag = {
   enabledForHosts: boolean;
   updatedAt: string;
   updatedByAdminUid?: string;
+  updatedByAdminEmail?: string;
+  updatedByAdminName?: string;
 };
 
 type FlagsData = {
@@ -123,7 +125,13 @@ export function AdminFeatureFlags() {
               <p className="text-xs text-slate-500">{flag.description}</p>
               {flag.updatedByAdminUid && (
                 <p className="text-[10px] text-slate-400 mt-1">
-                  Updated {timeAgo(flag.updatedAt)} · by {flag.updatedByAdminUid.slice(0, 8)}…
+                  Updated {timeAgo(flag.updatedAt)} · by{" "}
+                  <span className="font-semibold text-slate-500">
+                    {flag.updatedByAdminName || flag.updatedByAdminEmail || `${flag.updatedByAdminUid.slice(0, 8)}…`}
+                  </span>
+                  {flag.updatedByAdminName && flag.updatedByAdminEmail && (
+                    <span className="text-slate-400"> ({flag.updatedByAdminEmail})</span>
+                  )}
                 </p>
               )}
             </div>

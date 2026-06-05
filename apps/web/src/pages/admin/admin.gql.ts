@@ -109,6 +109,8 @@ export const ADMIN_FEATURE_FLAGS = gql`
       enabledForHosts
       updatedAt
       updatedByAdminUid
+      updatedByAdminEmail
+      updatedByAdminName
     }
   }
 `;
