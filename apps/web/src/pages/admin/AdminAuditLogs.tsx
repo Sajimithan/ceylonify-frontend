@@ -10,6 +10,8 @@ const ADMIN_AUDIT_LOGS = gql`
       id
       action
       adminFirebaseUid
+      adminEmail
+      adminName
       resourceId
       details
       createdAt
@@ -21,6 +23,8 @@ type AuditLog = {
   id: string;
   action: string;
   adminFirebaseUid: string;
+  adminEmail?: string;
+  adminName?: string;
   resourceId?: string;
   details?: string;
   createdAt: string;
@@ -80,7 +84,13 @@ export function AdminAuditLogs() {
               )}
               <div className="mt-1 flex gap-4 flex-wrap">
                 <p className="text-xs text-slate-400">
-                  Admin: <span className="font-mono">{log.adminFirebaseUid}</span>
+                  Admin:{" "}
+                  <span className="font-semibold text-slate-500">
+                    {log.adminName || log.adminEmail || log.adminFirebaseUid.slice(0, 8) + "…"}
+                  </span>
+                  {log.adminName && log.adminEmail && (
+                    <span className="text-slate-400"> ({log.adminEmail})</span>
+                  )}
                 </p>
                 {log.resourceId && (
                   <p className="text-xs text-slate-400">

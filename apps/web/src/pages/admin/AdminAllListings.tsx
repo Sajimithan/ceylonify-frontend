@@ -131,6 +131,9 @@ function ListingDetailModal({
   const [reject, { loading: rejecting }] = useMutation(REJECT_LISTING, {
     onCompleted: () => { onRefetch(); onClose(); },
   });
+  const [suspendListing, { loading: suspending }] = useMutation(ADMIN_SUSPEND_LISTING, {
+    onCompleted: () => { onRefetch(); onClose(); },
+  });
 
   const hasCoords = !!(listing.lat && listing.lng && listing.lat !== 0 && listing.lng !== 0);
 
@@ -337,9 +340,6 @@ export function AdminAllListings() {
   const [filter, setFilter] = useState<FilterStatus>("ALL");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Listing | null>(null);
-  const [suspendListing, { loading: suspending }] = useMutation(ADMIN_SUSPEND_LISTING, {
-    onCompleted: () => { refetch(); setSelected(null); },
-  });
 
   const users = usersData?.adminAllUsers ?? [];
   const all = data?.adminAllListings ?? [];
