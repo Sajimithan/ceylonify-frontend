@@ -27,6 +27,7 @@ export const GET_LISTING = gql`
       type
       category
       price
+      priceTiers { label price description }
       startDateTime
       placeName
       mapLink
