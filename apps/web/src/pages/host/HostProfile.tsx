@@ -397,7 +397,7 @@ export function HostProfile() {
         </div>
 
         {/* Contact Support */}
-        <ContactSupportSection />
+        <ContactSupportSection isSuperAdmin={meData?.me?.isSuperAdmin ?? false} />
 
         {/* Danger Zone */}
         <div className="bg-white rounded-2xl shadow p-7 border border-red-100">

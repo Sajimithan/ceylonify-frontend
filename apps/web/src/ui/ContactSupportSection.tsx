@@ -37,7 +37,8 @@ function formatDate(iso: string) {
   });
 }
 
-export function ContactSupportSection() {
+export function ContactSupportSection({ isSuperAdmin }: { isSuperAdmin?: boolean }) {
+  if (isSuperAdmin) return null;
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [success, setSuccess] = useState(false);

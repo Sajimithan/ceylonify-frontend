@@ -156,7 +156,7 @@ export function TravelerAccount() {
         </div>
 
         {/* Contact Support */}
-        <ContactSupportSection />
+        <ContactSupportSection isSuperAdmin={me?.isSuperAdmin ?? false} />
 
         {/* Danger zone */}
         <div className="bg-white rounded-2xl shadow-lg p-7 border border-red-100">

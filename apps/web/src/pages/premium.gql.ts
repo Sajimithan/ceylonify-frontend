@@ -10,6 +10,7 @@ export const ME_VERIFICATION_STATUS = gql`
       phoneVerifiedAt
       phone
       subscriptionExpiresAt
+      isSuperAdmin
     }
   }
 `;
