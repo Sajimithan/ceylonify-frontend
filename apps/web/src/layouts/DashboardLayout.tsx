@@ -180,7 +180,7 @@ export function DashboardLayout({
         </div>
 
         {/* Navigation */}
-        <nav ref={navRef} className="flex-1 py-4 overflow-y-auto">
+        <nav ref={navRef} className="flex-1 py-4 overflow-y-auto sidebar-scrollbar">
           <div className="mb-2">
             <p className="px-6 text-[9px] font-bold uppercase tracking-widest text-sidebar-muted mb-1">
               Discover
