@@ -27,6 +27,7 @@ type Listing = {
   status: string;
   isRepost?: boolean;
   rejectionReason?: string;
+  suspensionReason?: string;
   createdAt: string;
   createdBy?: string;
   imageUrl?: string;
@@ -199,6 +200,18 @@ function ListingDetailModal({
             <div className="bg-red-50 border border-red-200 rounded-xl p-3">
               <p className="text-xs font-bold text-red-700 mb-1">Rejection Reason</p>
               <p className="text-sm text-red-600">{listing.rejectionReason}</p>
+            </div>
+          )}
+
+          {/* Suspension reason — shown when SUSPENDED, or when re-submitted after suspension */}
+          {listing.suspensionReason && (listing.status === "SUSPENDED" || listing.isRepost) && (
+            <div className="bg-orange-50 border border-orange-200 rounded-xl p-3">
+              <p className="text-xs font-bold text-orange-700 mb-1">
+                {listing.isRepost && listing.status === "PENDING"
+                  ? "Previous Suspension Reason"
+                  : "Suspension Reason"}
+              </p>
+              <p className="text-sm text-orange-700 leading-relaxed">{listing.suspensionReason}</p>
             </div>
           )}
 

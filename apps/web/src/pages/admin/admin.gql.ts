@@ -143,6 +143,7 @@ export const ADMIN_ALL_LISTINGS = gql`
       status
       isRepost
       rejectionReason
+      suspensionReason
       createdAt
       createdBy
       imageUrl

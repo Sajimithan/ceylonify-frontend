@@ -29,6 +29,7 @@ type Listing = {
   placeName?: string;
   status: string;
   isRepost?: boolean;
+  suspensionReason?: string;
   createdAt: string;
   lat?: number;
   lng?: number;
@@ -268,6 +269,15 @@ function ListingReviewModal({
               {listing.description}
             </p>
           </div>
+
+          {/* Previous suspension reason — shown for re-submitted listings */}
+          {listing.isRepost && listing.suspensionReason && (
+            <div className="bg-orange-50 border border-orange-200 rounded-xl p-3">
+              <p className="text-xs font-bold text-orange-700 mb-1">⚠️ Previous Suspension Reason</p>
+              <p className="text-sm text-orange-700 leading-relaxed">{listing.suspensionReason}</p>
+              <p className="text-[10px] text-orange-400 mt-1.5">The host has edited and resubmitted this listing after it was suspended.</p>
+            </div>
+          )}
 
           {/* Metadata grid */}
           <div className="grid grid-cols-2 gap-3">
