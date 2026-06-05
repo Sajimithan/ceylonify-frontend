@@ -122,6 +122,7 @@ function ListingDetailModal({
 }) {
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectForm, setShowRejectForm] = useState(false);
+  const [showSuspendConfirm, setShowSuspendConfirm] = useState(false);
 
   const host = users.find((u) => u.firebaseUid === listing.createdBy);
 
@@ -248,17 +249,14 @@ function ListingDetailModal({
             )}
 
             {/* APPROVED: Take Down + Suspend */}
-            {listing.status === "APPROVED" && !showRejectForm && (
+            {listing.status === "APPROVED" && !showRejectForm && !showSuspendConfirm && (
               <div className="flex gap-3">
                 <div className="flex-1 text-xs text-slate-400 italic flex items-center">Currently live and visible to travelers.</div>
                 <Button
                   variant="ghost"
                   className="border border-orange-200 text-orange-600 hover:bg-orange-50"
                   disabled={suspending}
-                  onClick={() => {
-                    if (confirm(`Suspend "${listing.title}"? It will be hidden from travelers.`))
-                      suspendListing({ variables: { id: listing.id } });
-                  }}
+                  onClick={() => setShowSuspendConfirm(true)}
                 >
                   ⚠️ Suspend
                 </Button>
@@ -270,6 +268,28 @@ function ListingDetailModal({
                 >
                   🚫 Take Down
                 </Button>
+              </div>
+            )}
+
+            {/* Suspend confirmation panel */}
+            {showSuspendConfirm && (
+              <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 space-y-3">
+                <p className="text-sm font-bold text-orange-700">⚠️ Suspend this listing?</p>
+                <p className="text-xs text-orange-600 leading-relaxed">
+                  <span className="font-semibold">"{listing.title}"</span> will be immediately hidden from all travelers. The host will be notified. You can re-approve it later.
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    disabled={suspending}
+                    className="bg-orange-500 hover:bg-orange-600 text-white border-0"
+                    onClick={() => suspendListing({ variables: { id: listing.id } })}
+                  >
+                    {suspending ? "Suspending…" : "Yes, Suspend"}
+                  </Button>
+                  <Button variant="ghost" onClick={() => setShowSuspendConfirm(false)}>
+                    Cancel
+                  </Button>
+                </div>
               </div>
             )}
 
