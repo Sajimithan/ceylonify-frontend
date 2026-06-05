@@ -66,8 +66,8 @@ export const ADMIN_SUSPEND_LISTING = gql`
 `;
 
 export const ADMIN_BROADCAST_ANNOUNCEMENT = gql`
-  mutation AdminBroadcastAnnouncement($title: String!, $body: String!) {
-    adminBroadcastAnnouncement(title: $title, body: $body)
+  mutation AdminBroadcastAnnouncement($title: String!, $body: String!, $roles: [String!]) {
+    adminBroadcastAnnouncement(title: $title, body: $body, roles: $roles)
   }
 `;
 
