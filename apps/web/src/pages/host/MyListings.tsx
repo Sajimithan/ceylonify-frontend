@@ -270,6 +270,7 @@ export function MyListings() {
   const [sharingListing, setSharingListing] = useState<Listing | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Listing | null>(null);
   const [reviewTarget, setReviewTarget] = useState<Listing | null>(null);
+  const [resubmitTarget, setResubmitTarget] = useState<Listing | null>(null);
 
   useEffect(() => {
     listenForegroundMessages();
@@ -277,8 +278,7 @@ export function MyListings() {
 
 
   async function handleResubmit(l: Listing) {
-    if (!confirm("Resubmit this listing for review?")) return;
-    await updateListing({ variables: { id: l.id, input: { title: l.title } } });
+    setResubmitTarget(l);
   }
 
   const allListings = data?.myListings ?? [];
@@ -459,6 +459,19 @@ export function MyListings() {
         <ShareModal
           listing={sharingListing}
           onClose={() => setSharingListing(null)}
+        />
+      )}
+      {resubmitTarget && (
+        <ConfirmModal
+          title="Resubmit for Review"
+          description="Your listing will be sent back to the admin queue for review. Make sure you've addressed any rejection reasons before resubmitting."
+          detail={resubmitTarget.title}
+          confirmLabel="Resubmit"
+          onConfirm={async () => {
+            await updateListing({ variables: { id: resubmitTarget.id, input: { title: resubmitTarget.title } } });
+            setResubmitTarget(null);
+          }}
+          onCancel={() => setResubmitTarget(null)}
         />
       )}
       {deleteTarget && (
