@@ -18,6 +18,7 @@ type Listing = {
   description: string;
   type: string;
   status: string;
+  isRepost?: boolean;
   createdAt: string;
   startDateTime?: string;
   rejectionReason?: string;
@@ -361,7 +362,13 @@ export function MyListings() {
                     )}
                   </div>
                 </div>
-                <Badge value={l.status} />
+                {l.isRepost && l.status === 'PENDING' ? (
+                  <span className="text-xs font-bold inline-block py-1 px-2 rounded bg-violet-100 text-violet-700 uppercase">
+                    Resubmitted
+                  </span>
+                ) : (
+                  <Badge value={l.status} />
+                )}
               </div>
 
               {l.imageUrl && (

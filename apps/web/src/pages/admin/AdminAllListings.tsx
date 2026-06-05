@@ -25,6 +25,7 @@ type Listing = {
   lat?: number;
   lng?: number;
   status: string;
+  isRepost?: boolean;
   rejectionReason?: string;
   createdAt: string;
   createdBy?: string;
@@ -148,7 +149,13 @@ function ListingDetailModal({
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-slate-100 sticky top-0 bg-white z-10">
           <div className="flex items-center gap-2">
-            <StatusPill status={listing.status} />
+            {listing.isRepost && listing.status === "PENDING" ? (
+              <span className="text-xs font-bold inline-block py-1 px-2 rounded bg-violet-100 text-violet-700 uppercase tracking-wide">
+                Re-submitted
+              </span>
+            ) : (
+              <StatusPill status={listing.status} />
+            )}
             <span className="text-xs text-slate-400">
               {new Date(listing.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}
             </span>
@@ -454,7 +461,13 @@ export function AdminAllListings() {
                 )}
                 <div className="flex items-start justify-between gap-2 mb-1">
                   <h6 className="text-base font-bold text-slate-700 leading-snug line-clamp-2">{l.title}</h6>
-                  <StatusPill status={l.status} />
+                  {l.isRepost && l.status === "PENDING" ? (
+                    <span className="text-xs font-bold inline-block py-1 px-2 rounded bg-violet-100 text-violet-700 uppercase tracking-wide flex-shrink-0">
+                      Re-submitted
+                    </span>
+                  ) : (
+                    <StatusPill status={l.status} />
+                  )}
                 </div>
                 <div className="flex items-center gap-1.5 mb-2">
                   <span className="text-[10px] bg-slate-100 text-slate-500 font-bold px-2 py-0.5 rounded-full uppercase">{l.type}</span>

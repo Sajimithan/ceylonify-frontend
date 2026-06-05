@@ -28,6 +28,7 @@ type Listing = {
   startDateTime?: string;
   placeName?: string;
   status: string;
+  isRepost?: boolean;
   createdAt: string;
   lat?: number;
   lng?: number;
@@ -224,7 +225,13 @@ function ListingReviewModal({
           <div>
             <h2 className="text-lg font-bold text-slate-800">{listing.title}</h2>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
-              <Badge value={listing.status} />
+              {listing.isRepost ? (
+                <span className="text-xs font-bold inline-block py-1 px-2 rounded bg-violet-100 text-violet-700 uppercase tracking-wide">
+                  Re-submitted
+                </span>
+              ) : (
+                <Badge value={listing.status} />
+              )}
               <span className="text-xs font-bold uppercase text-slate-400">{listing.type}</span>
               {listing.category && (
                 <span className="text-xs text-slate-400">
@@ -459,7 +466,13 @@ export function AdminPendingListings() {
                     <h6 className="text-base font-bold text-slate-700">{l.title}</h6>
                     <div className="mt-0.5 text-xs font-bold uppercase text-slate-400">{l.type}</div>
                   </div>
-                  <Badge value={l.status} />
+                  {l.isRepost ? (
+                    <span className="text-xs font-bold inline-block py-1 px-2 rounded bg-violet-100 text-violet-700 uppercase tracking-wide">
+                      Re-submitted
+                    </span>
+                  ) : (
+                    <Badge value={l.status} />
+                  )}
                 </div>
 
                 {l.imageUrl && (

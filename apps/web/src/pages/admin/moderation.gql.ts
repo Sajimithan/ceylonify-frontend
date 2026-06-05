@@ -12,6 +12,7 @@ export const PENDING_LISTINGS = gql`
       startDateTime
       placeName
       status
+      isRepost
       createdAt
       lat
       lng

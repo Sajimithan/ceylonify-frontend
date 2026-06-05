@@ -141,6 +141,7 @@ export const ADMIN_ALL_LISTINGS = gql`
       lat
       lng
       status
+      isRepost
       rejectionReason
       createdAt
       createdBy
