@@ -487,7 +487,7 @@ export function CreateListing() {
                       timeFormat="HH:mm"
                       timeIntervals={15}
                       dateFormat="MMM d, yyyy h:mm aa"
-                      minDate={new Date()}
+                      minDate={(() => { const d = new Date(); d.setHours(0,0,0,0); return d; })()}
                       placeholderText="Pick a date & time"
                       className="border-0 px-3 py-3 text-slate-600 bg-white rounded text-sm shadow focus:outline-none focus:ring w-full ease-linear transition-all duration-150"
                       wrapperClassName="w-full"
@@ -568,7 +568,7 @@ export function CreateListing() {
                       timeFormat="HH:mm"
                       timeIntervals={15}
                       dateFormat="MMM d, yyyy h:mm aa"
-                      minDate={new Date()}
+                      minDate={(() => { const d = new Date(); d.setHours(0,0,0,0); return d; })()}
                       placeholderText="Pick a date & time"
                       className="border-0 px-3 py-3 text-slate-600 bg-white rounded text-sm shadow focus:outline-none focus:ring w-full ease-linear transition-all duration-150"
                       wrapperClassName="w-full"
