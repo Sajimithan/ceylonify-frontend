@@ -11,6 +11,7 @@ export const MY_LISTINGS = gql`
       createdAt
       startDateTime
       rejectionReason
+      suspensionReason
       imageUrl
       isPremium
       viewCount

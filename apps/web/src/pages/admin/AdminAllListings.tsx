@@ -123,6 +123,7 @@ function ListingDetailModal({
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [showSuspendConfirm, setShowSuspendConfirm] = useState(false);
+  const [suspendReason, setSuspendReason] = useState("");
 
   const host = users.find((u) => u.firebaseUid === listing.createdBy);
 
@@ -276,17 +277,31 @@ function ListingDetailModal({
               <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 space-y-3">
                 <p className="text-sm font-bold text-orange-700">⚠️ Suspend this listing?</p>
                 <p className="text-xs text-orange-600 leading-relaxed">
-                  <span className="font-semibold">"{listing.title}"</span> will be immediately hidden from all travelers. The host will be notified. You can re-approve it later.
+                  <span className="font-semibold">"{listing.title}"</span> will be immediately hidden from all travelers. The host will be notified and will see your reason below.
                 </p>
+                <div>
+                  <label className="block text-xs font-bold text-orange-700 mb-1">
+                    Reason for suspension <span className="font-normal text-orange-500">(shown to the host)</span>
+                  </label>
+                  <textarea
+                    value={suspendReason}
+                    onChange={(e) => setSuspendReason(e.target.value)}
+                    rows={3}
+                    placeholder="e.g. Misleading pricing information, please update your listing and resubmit…"
+                    maxLength={500}
+                    className="w-full border border-orange-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white text-slate-700 placeholder-slate-300"
+                  />
+                  <div className="text-right text-[10px] text-orange-400 mt-0.5">{suspendReason.length}/500</div>
+                </div>
                 <div className="flex gap-2">
                   <Button
                     disabled={suspending}
                     className="bg-orange-500 hover:bg-orange-600 text-white border-0"
-                    onClick={() => suspendListing({ variables: { id: listing.id } })}
+                    onClick={() => suspendListing({ variables: { id: listing.id, reason: suspendReason.trim() || undefined } })}
                   >
                     {suspending ? "Suspending…" : "Yes, Suspend"}
                   </Button>
-                  <Button variant="ghost" onClick={() => setShowSuspendConfirm(false)}>
+                  <Button variant="ghost" onClick={() => { setShowSuspendConfirm(false); setSuspendReason(""); }}>
                     Cancel
                   </Button>
                 </div>

@@ -21,6 +21,7 @@ type Listing = {
   createdAt: string;
   startDateTime?: string;
   rejectionReason?: string;
+  suspensionReason?: string;
   imageUrl?: string;
   isPremium?: boolean;
   viewCount?: number;
@@ -193,6 +194,65 @@ function ShareModal({
   );
 }
 
+function SuspensionReviewModal({
+  listing,
+  onClose,
+  onDelete,
+}: {
+  listing: Listing;
+  onClose: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 relative">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">⚠️</span>
+            <h3 className="text-slate-800 font-bold text-lg">Listing Suspended</h3>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
+            <XMarkIcon className="w-5 h-5" />
+          </button>
+        </div>
+
+        <p className="text-sm text-slate-500 mb-4 font-medium truncate">{listing.title}</p>
+
+        <div className="rounded-xl bg-orange-50 border border-orange-200 p-4 mb-5">
+          <p className="text-xs font-bold uppercase text-orange-600 mb-1">Admin note</p>
+          {listing.suspensionReason ? (
+            <p className="text-sm text-orange-800 leading-relaxed">{listing.suspensionReason}</p>
+          ) : (
+            <p className="text-sm text-orange-400 italic">No specific reason provided. Please contact support for details.</p>
+          )}
+        </div>
+
+        <p className="text-xs text-slate-400 mb-5 leading-relaxed">
+          Your listing is currently hidden from travelers. You can edit it to address the issue and resubmit for review, or permanently delete it.
+        </p>
+
+        <div className="flex gap-3">
+          <Link to={`/host/edit/${listing.id}`} className="flex-1">
+            <Button className="w-full" onClick={onClose}>
+              ✏️ Edit Listing
+            </Button>
+          </Link>
+          <Button
+            variant="danger"
+            className="flex-1"
+            onClick={onDelete}
+          >
+            🗑 Delete
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function MyListings() {
   const { data, loading, error, refetch, startPolling, stopPolling } = useQuery<MyListingsData>(MY_LISTINGS, {
     fetchPolicy: "cache-and-network",
@@ -208,6 +268,7 @@ export function MyListings() {
   });
   const [sharingListing, setSharingListing] = useState<Listing | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Listing | null>(null);
+  const [reviewTarget, setReviewTarget] = useState<Listing | null>(null);
 
   useEffect(() => {
     listenForegroundMessages();
@@ -347,6 +408,15 @@ export function MyListings() {
                       Resubmit
                     </Button>
                   )}
+                  {l.status === 'SUSPENDED' && (
+                    <Button
+                      variant="ghost"
+                      className="!px-3 !py-1 !text-[10px] text-orange-600 border border-orange-200 hover:bg-orange-50"
+                      onClick={() => setReviewTarget(l)}
+                    >
+                      Review
+                    </Button>
+                  )}
                   <Link to={`/host/edit/${l.id}`}>
                     <Button variant="ghost" className="!px-3 !py-1 !text-[10px] text-sky-600">Edit</Button>
                   </Link>
@@ -395,6 +465,16 @@ export function MyListings() {
             setDeleteTarget(null);
           }}
           onCancel={() => setDeleteTarget(null)}
+        />
+      )}
+      {reviewTarget && (
+        <SuspensionReviewModal
+          listing={reviewTarget}
+          onClose={() => setReviewTarget(null)}
+          onDelete={() => {
+            setDeleteTarget(reviewTarget);
+            setReviewTarget(null);
+          }}
         />
       )}
     </DashboardLayout>

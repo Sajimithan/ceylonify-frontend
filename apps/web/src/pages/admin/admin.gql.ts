@@ -60,8 +60,8 @@ export const ADMIN_ACTIVATE_USER = gql`
 `;
 
 export const ADMIN_SUSPEND_LISTING = gql`
-  mutation AdminSuspendListing($id: String!) {
-    adminSuspendListing(id: $id)
+  mutation AdminSuspendListing($id: String!, $reason: String) {
+    adminSuspendListing(id: $id, reason: $reason)
   }
 `;
 
