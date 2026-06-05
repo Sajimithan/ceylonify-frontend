@@ -384,6 +384,11 @@ function ListingDetailModal({
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 type FilterStatus = "ALL" | "PENDING" | "APPROVED" | "REJECTED";
+type ViewMode = "active" | "past";
+
+function isPastEvent(l: Listing) {
+  return !!l.startDateTime && new Date(l.startDateTime) < new Date();
+}
 
 export function AdminAllListings() {
   const { data, loading, error, refetch, startPolling, stopPolling } = useQuery<{ adminAllListings: Listing[] }>(ADMIN_ALL_LISTINGS, {
@@ -392,6 +397,7 @@ export function AdminAllListings() {
   useSmartPoll(startPolling, stopPolling, 15_000);
   const { data: usersData } = useQuery<{ adminAllUsers: UserRecord[] }>(ADMIN_ALL_USERS);
 
+  const [viewMode, setViewMode] = useState<ViewMode>("active");
   const [filter, setFilter] = useState<FilterStatus>("ALL");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Listing | null>(null);
@@ -399,17 +405,21 @@ export function AdminAllListings() {
   const users = usersData?.adminAllUsers ?? [];
   const all = data?.adminAllListings ?? [];
 
-  const filtered = all.filter((l) => {
+  const activeListings = all.filter((l) => !isPastEvent(l));
+  const pastListings = all.filter(isPastEvent);
+  const pool = viewMode === "past" ? pastListings : activeListings;
+
+  const filtered = pool.filter((l) => {
     const matchStatus = filter === "ALL" || l.status === filter;
     const matchSearch = !search || l.title.toLowerCase().includes(search.toLowerCase());
     return matchStatus && matchSearch;
   });
 
   const counts = {
-    ALL: all.length,
-    PENDING: all.filter((l) => l.status === "PENDING").length,
-    APPROVED: all.filter((l) => l.status === "APPROVED").length,
-    REJECTED: all.filter((l) => l.status === "REJECTED").length,
+    ALL: pool.length,
+    PENDING: pool.filter((l) => l.status === "PENDING").length,
+    APPROVED: pool.filter((l) => l.status === "APPROVED").length,
+    REJECTED: pool.filter((l) => l.status === "REJECTED").length,
   };
 
   return (
@@ -424,6 +434,40 @@ export function AdminAllListings() {
       }
     >
       <div className="mx-auto w-full max-w-7xl space-y-4">
+
+        {/* Active / Past Events tabs */}
+        <div className="flex gap-1 bg-white rounded-xl p-1 shadow-sm border border-slate-200 w-fit">
+          <button
+            onClick={() => { setViewMode("active"); setFilter("ALL"); }}
+            className={`px-5 py-2 text-sm font-bold rounded-lg transition-all ${
+              viewMode === "active"
+                ? "bg-brand-500 text-white shadow"
+                : "text-slate-600 hover:bg-slate-100 hover:text-slate-800"
+            }`}
+          >
+            Active Listings
+            <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full font-bold ${
+              viewMode === "active" ? "bg-white/25 text-white" : "bg-slate-100 text-slate-500"
+            }`}>
+              {activeListings.length}
+            </span>
+          </button>
+          <button
+            onClick={() => { setViewMode("past"); setFilter("ALL"); }}
+            className={`px-5 py-2 text-sm font-bold rounded-lg transition-all ${
+              viewMode === "past"
+                ? "bg-slate-700 text-white shadow"
+                : "text-slate-600 hover:bg-slate-100 hover:text-slate-800"
+            }`}
+          >
+            Past Events
+            <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full font-bold ${
+              viewMode === "past" ? "bg-white/25 text-white" : "bg-slate-100 text-slate-500"
+            }`}>
+              {pastListings.length}
+            </span>
+          </button>
+        </div>
 
         {/* Filter + search bar */}
         <div className="flex flex-wrap items-center gap-3">
@@ -455,8 +499,11 @@ export function AdminAllListings() {
 
         {!loading && filtered.length === 0 && (
           <Card className="text-center py-12">
-            <div className="text-4xl mb-3">📋</div>
-            <p className="text-slate-400 font-semibold">No {filter !== "ALL" ? filter.toLowerCase() + " " : ""}listings found.</p>
+            <div className="text-4xl mb-3">{viewMode === "past" ? "🕰️" : "📋"}</div>
+            <p className="text-slate-400 font-semibold">
+              No {filter !== "ALL" ? filter.toLowerCase() + " " : ""}
+              {viewMode === "past" ? "past events" : "listings"} found.
+            </p>
           </Card>
         )}
 
@@ -489,8 +536,11 @@ export function AdminAllListings() {
                 </div>
                 {l.placeName && <p className="text-xs text-slate-400 mb-1">📍 {l.placeName}</p>}
                 {l.startDateTime && (
-                  <p className="text-xs text-slate-400 mb-1">
+                  <p className="text-xs text-slate-400 mb-1 flex items-center gap-1.5">
                     🗓 {new Date(l.startDateTime).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                    {isPastEvent(l) && (
+                      <span className="text-[10px] font-bold bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded-full uppercase">Ended</span>
+                    )}
                   </p>
                 )}
                 <p className="text-xs text-slate-500 line-clamp-2 mb-3 flex-1">{l.description}</p>
