@@ -160,6 +160,15 @@ export const ADMIN_CLOSE_SUPPORT_TICKET = gql`
   }
 `;
 
+export const AI_SUPPORT_SUMMARY = gql`
+  mutation AiSupportSummary($subject: String!, $conversation: String!) {
+    aiSupportSummary(subject: $subject, conversation: $conversation) {
+      summary
+      suggestedReply
+    }
+  }
+`;
+
 export const ADMIN_ALL_LISTINGS = gql`
   query AdminAllListings {
     adminAllListings {

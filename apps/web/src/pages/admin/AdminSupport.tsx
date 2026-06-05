@@ -3,11 +3,12 @@ import { useQuery, useMutation } from "@apollo/client/react";
 import { DashboardLayout } from "../../layouts/DashboardLayout";
 import { Card } from "../../ui/Card";
 import { Button } from "../../ui/Button";
-import { XMarkIcon } from "@heroicons/react/24/outline";
+import { XMarkIcon, SparklesIcon } from "@heroicons/react/24/outline";
 import {
   ADMIN_ALL_SUPPORT_TICKETS,
   ADMIN_REPLY_TO_SUPPORT_TICKET,
   ADMIN_CLOSE_SUPPORT_TICKET,
+  AI_SUPPORT_SUMMARY,
 } from "./admin.gql";
 
 type SupportStatus = "OPEN" | "REPLIED" | "CLOSED";
@@ -59,6 +60,147 @@ function StatusBadge({ status }: { status: SupportStatus }) {
     >
       {status}
     </span>
+  );
+}
+
+type AISupportResult = { summary: string; suggestedReply: string };
+
+function AISupportPanel({
+  ticket,
+  onUseSuggestion,
+}: {
+  ticket: SupportTicket;
+  onUseSuggestion: (text: string) => void;
+}) {
+  const [state, setState] = useState<"idle" | "loading" | "result">("idle");
+  const [result, setResult] = useState<AISupportResult | null>(null);
+  const [aiError, setAiError] = useState("");
+
+  const [runSummary] = useMutation<{ aiSupportSummary: AISupportResult }>(
+    AI_SUPPORT_SUMMARY,
+    {
+      onCompleted: (data) => {
+        setResult(data.aiSupportSummary);
+        setState("result");
+        setAiError("");
+      },
+      onError: (e) => {
+        setAiError(e.message);
+        setState("idle");
+      },
+    }
+  );
+
+  const buildConversation = () => {
+    const parts = [`User: ${ticket.message}`];
+    ticket.replies.forEach((r) => {
+      parts.push(`${r.fromAdmin ? "Admin" : "User"}: ${r.message}`);
+    });
+    return parts.join("\n\n");
+  };
+
+  const handleRun = () => {
+    setState("loading");
+    setResult(null);
+    void runSummary({
+      variables: {
+        subject: ticket.subject,
+        conversation: buildConversation(),
+      },
+    });
+  };
+
+  if (state === "idle") {
+    return (
+      <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <SparklesIcon className="w-4 h-4 text-violet-500 shrink-0" />
+          <div>
+            <div className="text-xs font-bold text-violet-700">AI Assist</div>
+            <div className="text-xs text-violet-500">Summarize the query and get a suggested reply</div>
+          </div>
+        </div>
+        <button
+          onClick={handleRun}
+          className="shrink-0 flex items-center gap-1.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors"
+        >
+          <SparklesIcon className="w-3.5 h-3.5" />
+          Summarize
+        </button>
+        {aiError && (
+          <p className="text-xs text-red-500 font-semibold mt-1">{aiError}</p>
+        )}
+      </div>
+    );
+  }
+
+  if (state === "loading") {
+    return (
+      <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 flex items-center gap-3">
+        <div className="w-4 h-4 border-2 border-violet-400 border-t-transparent rounded-full animate-spin shrink-0" />
+        <span className="text-xs font-semibold text-violet-700">
+          AI is reading the conversation…
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-violet-200 bg-violet-50 overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-violet-200">
+        <div className="flex items-center gap-1.5">
+          <SparklesIcon className="w-3.5 h-3.5 text-violet-600" />
+          <span className="text-xs font-bold text-violet-700 uppercase tracking-wide">
+            AI Assist
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleRun}
+            className="text-[10px] text-violet-500 hover:text-violet-700 font-semibold transition-colors"
+          >
+            Re-run
+          </button>
+          <button
+            onClick={() => setState("idle")}
+            className="text-violet-400 hover:text-violet-600 transition-colors"
+          >
+            <XMarkIcon className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {result && (
+        <div className="p-4 space-y-3">
+          {/* Summary */}
+          <div className="bg-white rounded-lg p-3 border border-violet-100">
+            <p className="text-[10px] font-bold uppercase text-violet-500 mb-1.5 tracking-wide">
+              Summary
+            </p>
+            <p className="text-sm text-slate-700 leading-relaxed">{result.summary}</p>
+          </div>
+
+          {/* Suggested Reply */}
+          <div className="bg-white rounded-lg p-3 border border-violet-100">
+            <p className="text-[10px] font-bold uppercase text-violet-500 mb-1.5 tracking-wide">
+              Suggested Reply
+            </p>
+            <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">
+              {result.suggestedReply}
+            </p>
+            <div className="flex justify-end mt-2.5">
+              <button
+                onClick={() => onUseSuggestion(result.suggestedReply)}
+                className="text-xs font-bold text-violet-600 hover:text-violet-800 bg-violet-100 hover:bg-violet-200 px-3 py-1 rounded-lg transition-colors"
+              >
+                Use this reply ↓
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -183,7 +325,14 @@ function TicketDetailModal({
 
           {/* Reply box (only when ticket not closed) */}
           {ticket.status !== "CLOSED" && (
-            <div className="border-t border-slate-100 pt-4">
+            <div className="border-t border-slate-100 pt-4 space-y-4">
+              {/* AI Assist panel */}
+              <AISupportPanel
+                ticket={ticket}
+                onUseSuggestion={(text) => setReplyText(text)}
+              />
+
+              <div>
               <h3 className="text-xs font-bold uppercase text-slate-400 mb-2">
                 Reply
               </h3>
@@ -214,6 +363,7 @@ function TicketDetailModal({
                 >
                   {closing ? "Closing..." : "Close Ticket"}
                 </Button>
+              </div>
               </div>
             </div>
           )}
