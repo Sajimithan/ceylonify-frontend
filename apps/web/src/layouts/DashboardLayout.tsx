@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useLayoutEffect } from "react";
 import { useFeatureFlags } from "../auth/useFeatureFlags";
 import { NotificationBell } from "../notifications/NotificationBell";
 import { Link, useLocation } from "react-router-dom";
@@ -64,7 +64,7 @@ function NavLink({
   const { pathname } = useLocation();
   const active =
     pathname === to ||
-    (to !== "/dashboard" && to !== "/admin/users" && pathname.startsWith(to)) ||
+    (to !== "/dashboard" && to !== "/admin" && to !== "/admin/users" && pathname.startsWith(to)) ||
     (to === "/admin/users" && (pathname === "/admin/users" || pathname.startsWith("/admin/users/")));
   const Icon = NAV_ICONS[to] ?? HomeIcon;
 
@@ -107,6 +107,18 @@ export function DashboardLayout({
   const isAdmin = isAdminEmail(user?.email);
   const { isEnabledFor } = useFeatureFlags();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const sidebarRef = useRef<HTMLElement>(null);
+  const navRef = useRef<HTMLElement>(null);
+
+  useLayoutEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    const saved = sessionStorage.getItem("sidebar-scroll");
+    if (saved) el.scrollTop = Number(saved);
+    const onScroll = () => sessionStorage.setItem("sidebar-scroll", String(el.scrollTop));
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
 
   async function logout() {
     await signOut(auth);
@@ -128,6 +140,7 @@ export function DashboardLayout({
 
       {/* Sidebar */}
       <aside
+        ref={sidebarRef}
         className={`
           fixed md:relative inset-y-0 left-0 z-20
           w-64 flex-shrink-0 flex flex-col
@@ -167,7 +180,7 @@ export function DashboardLayout({
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 py-4 overflow-y-auto">
+        <nav ref={navRef} className="flex-1 py-4 overflow-y-auto">
           <div className="mb-2">
             <p className="px-6 text-[9px] font-bold uppercase tracking-widest text-sidebar-muted mb-1">
               Discover
