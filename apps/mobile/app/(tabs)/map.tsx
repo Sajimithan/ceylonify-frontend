@@ -7,7 +7,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { WebView } from 'react-native-webview';
 import {
   Search, Filter, MapPin, X, ArrowRight, Heart, CalendarPlus,
-  Sparkles, Navigation, Trash2, Plus, ChevronUp, Calendar,
+  Sparkles, Navigation, Trash2, Plus, ChevronUp, ChevronDown, Calendar,
 } from 'lucide-react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useGraphQL, gqlFetch } from '../../src/hooks/useGraphQL';
@@ -170,6 +170,8 @@ const GMAPS_KEY = getGoogleMapsApiKey() || 'AIzaSyCAisocwaWcaNQxbt2MM9Kahvu-h3a2
 
 type FilterType = 'ALL' | 'EVENT' | 'RENTAL' | 'ACCOMMODATION' | 'ACTIVITY';
 const FILTER_OPTIONS: FilterType[] = ['ALL', 'EVENT', 'RENTAL', 'ACCOMMODATION', 'ACTIVITY'];
+const NEAR_ME_RADIUS_OPTIONS = [25, 50, 75, 100, 150] as const;
+const NEAR_ME_MAX_RADIUS_KM = 150;
 
 // Injected into the WebView — calculates dot color from startDateTime
 const MARKER_COLOR_JS = `
@@ -475,6 +477,8 @@ export default function MapScreen() {
   const [nearMeActive, setNearMeActive] = useState(false);
   const [nearMeLoading, setNearMeLoading] = useState(false);
   const [nearMeError, setNearMeError] = useState<string | null>(null);
+  const [nearMeRadiusKm, setNearMeRadiusKm] = useState<number>(50);
+  const [nearMeRadiusMenuOpen, setNearMeRadiusMenuOpen] = useState(false);
   const [nearbyResults, setNearbyResults] = useState<any[]>([]);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [mapSearchCenter, setMapSearchCenter] = useState<{ lat: number; lng: number } | null>(null);
@@ -500,6 +504,8 @@ export default function MapScreen() {
     setSearchText(suggestion.mainText);
     setNearMeActive(false);
     setNearbyResults([]);
+    setNearMeRadiusMenuOpen(false);
+    setNearMeRadiusKm(50);
     setSelectedId(null);
 
     const details = await fetchPlaceDetails(suggestion.placeId);
@@ -515,10 +521,15 @@ export default function MapScreen() {
   }
 
   // Filtered listings: nearMe → search text → type
+  const nearbyWithinRadius = useMemo(() => {
+    if (!nearMeActive) return [];
+    return nearbyResults
+      .filter(hasValidCoords)
+      .filter((listing) => (listing.distanceKm ?? Infinity) <= nearMeRadiusKm);
+  }, [nearMeActive, nearbyResults, nearMeRadiusKm]);
+
   const filteredListings = useMemo(() => {
-    let result = nearMeActive
-      ? nearbyResults.filter(hasValidCoords)
-      : mappable;
+    let result = nearMeActive ? nearbyWithinRadius : mappable;
 
     if (searchText.trim()) {
       const q = searchText.toLowerCase();
@@ -535,11 +546,11 @@ export default function MapScreen() {
     }
 
     return result;
-  }, [nearMeActive, nearbyResults, mappable, searchText, filterType]);
+  }, [nearMeActive, nearbyWithinRadius, mappable, searchText, filterType]);
 
   const nearbyStripList = useMemo(
-    () => (nearMeActive ? nearbyResults.filter(hasValidCoords) : []),
-    [nearMeActive, nearbyResults],
+    () => (nearMeActive ? filteredListings : []),
+    [nearMeActive, filteredListings],
   );
 
   const exploreMarkersKey = useMemo(
@@ -911,12 +922,31 @@ export default function MapScreen() {
     } catch {}
   }
 
+  async function fetchNearbyForLocation(lat: number, lng: number) {
+    const result = await gqlFetch<{ nearbyListings: any[] }>(NEARBY_QUERY, {
+      lat,
+      lng,
+      radiusKm: NEAR_ME_MAX_RADIUS_KM,
+      limit: 100,
+    }).catch(() => null);
+
+    return resolveNearbyListings(
+      result?.nearbyListings ?? [],
+      lat,
+      lng,
+      mappable,
+      NEAR_ME_MAX_RADIUS_KM,
+    );
+  }
+
   async function handleNearMe() {
     if (nearMeActive) {
       setNearMeActive(false);
       setNearbyResults([]);
       setUserLocation(null);
       setNearMeError(null);
+      setNearMeRadiusKm(50);
+      setNearMeRadiusMenuOpen(false);
       setSelectedId(null);
       return;
     }
@@ -926,6 +956,7 @@ export default function MapScreen() {
     setSearchText('');
     setMapSearchCenter(null);
     setFilterType('ALL');
+    setNearMeRadiusKm(50);
     try {
       const resolved = await resolveLocation();
       const { lat, lng } = resolved;
@@ -934,31 +965,23 @@ export default function MapScreen() {
         void gqlFetch(UPDATE_LOCATION_MUTATION, { lat, lng }).catch(() => {});
       }
 
-      const result = await gqlFetch<{ nearbyListings: any[] }>(NEARBY_QUERY, {
-        lat, lng, radiusKm: 50, limit: 40,
-      }).catch(() => null);
-
-      const nearby = resolveNearbyListings(
-        result?.nearbyListings ?? [],
-        lat,
-        lng,
-        mappable,
-        50,
-      );
+      const nearby = await fetchNearbyForLocation(lat, lng);
 
       setNearbyResults(nearby);
       setNearMeActive(true);
+      setNearMeRadiusMenuOpen(true);
       setSelectedId(null);
-      if (nearby.length === 0) {
-        setNearMeError('No listings within 50 km of your location.');
-      } else {
-        setNearMeError(null);
-      }
     } catch (e: any) {
       setNearMeError(e?.message ?? 'Could not get location. Try again.');
     } finally {
       setNearMeLoading(false);
     }
+  }
+
+  function handleNearMeRadiusSelect(radiusKm: number) {
+    setNearMeRadiusKm(radiusKm);
+    setNearMeRadiusMenuOpen(false);
+    setSelectedId(null);
   }
 
   async function toggleSave(listingId: string) {
@@ -1014,6 +1037,10 @@ export default function MapScreen() {
     : routePhase === 'saved'
       ? 'Route plan saved'
       : 'Plan your route';
+
+  const nearMeEmptyMessage = nearMeActive && !nearMeLoading && nearbyWithinRadius.length === 0
+    ? `No listings within ${nearMeRadiusKm} km of your location.`
+    : null;
 
   return (
     <View style={styles.container}>
@@ -1099,7 +1126,7 @@ export default function MapScreen() {
         </View>
       )}
 
-      {/* Near Me pill (explore only) */}
+      {/* Near Me pill + radius dropdown (explore only) */}
       {mapMode === 'explore' && (
         <View style={styles.nearMeRow}>
           <TouchableOpacity
@@ -1119,8 +1146,73 @@ export default function MapScreen() {
               {nearMeLoading ? 'Locating…' : nearMeActive ? '✕ All Listings' : 'Near Me'}
             </Text>
           </TouchableOpacity>
-          {nearMeError && <Text style={styles.nearMeError}>{nearMeError}</Text>}
+
+          {nearMeActive && (
+            <View style={styles.nearMeRadiusWrap}>
+              <TouchableOpacity
+                style={[
+                  styles.nearMeRadiusBtn,
+                  { backgroundColor: isDark ? 'rgba(11,18,32,0.93)' : '#FFFFFF', borderColor: colors.border },
+                  nearMeRadiusMenuOpen && styles.nearMeRadiusBtnOpen,
+                ]}
+                onPress={() => setNearMeRadiusMenuOpen((open) => !open)}
+                accessibilityLabel="Select search radius"
+              >
+                <Text style={[styles.nearMeRadiusBtnText, { color: colors.text }]}>
+                  {nearMeRadiusKm} km
+                </Text>
+                <ChevronDown
+                  size={14}
+                  color={colors.textMuted}
+                  style={nearMeRadiusMenuOpen ? { transform: [{ rotate: '180deg' }] } : undefined}
+                />
+              </TouchableOpacity>
+
+              {nearMeRadiusMenuOpen && (
+                <View
+                  style={[
+                    styles.nearMeRadiusMenu,
+                    { backgroundColor: colors.surface, borderColor: colors.border },
+                  ]}
+                >
+                  {NEAR_ME_RADIUS_OPTIONS.map((radiusKm) => {
+                    const active = nearMeRadiusKm === radiusKm;
+                    return (
+                      <TouchableOpacity
+                        key={radiusKm}
+                        style={[
+                          styles.nearMeRadiusOption,
+                          active && styles.nearMeRadiusOptionActive,
+                        ]}
+                        onPress={() => handleNearMeRadiusSelect(radiusKm)}
+                      >
+                        <Text
+                          style={[
+                            styles.nearMeRadiusOptionText,
+                            { color: active ? '#0EA5A4' : colors.text },
+                          ]}
+                        >
+                          {radiusKm} km
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+          )}
+
+          {(nearMeError || nearMeEmptyMessage) && (
+            <Text style={styles.nearMeError}>{nearMeError ?? nearMeEmptyMessage}</Text>
+          )}
         </View>
+      )}
+
+      {mapMode === 'explore' && nearMeRadiusMenuOpen && (
+        <Pressable
+          style={styles.nearMeRadiusBackdrop}
+          onPress={() => setNearMeRadiusMenuOpen(false)}
+        />
       )}
 
       {/* Loading overlay */}
@@ -1507,7 +1599,7 @@ export default function MapScreen() {
           ]}
         >
           <Text style={[styles.nearbyStripTitle, { color: colors.text }]}>
-            Near {savedLocation?.label ?? 'you'} · {nearbyStripList.length} found
+            Near {savedLocation?.label ?? 'you'} · {nearbyStripList.length} within {nearMeRadiusKm} km
           </Text>
           <FlatList
             horizontal
@@ -1677,7 +1769,8 @@ const styles = StyleSheet.create({
   // Near Me
   nearMeRow: {
     position: 'absolute', top: 176, left: 24,
-    zIndex: 10, flexDirection: 'row', alignItems: 'center', gap: 10,
+    zIndex: 22, flexDirection: 'row', alignItems: 'center', gap: 10,
+    flexWrap: 'wrap',
   },
   nearMeBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
@@ -1689,6 +1782,61 @@ const styles = StyleSheet.create({
   nearMeBtnActive: { backgroundColor: '#F59E0B' },
   nearMeBtnLoading: { backgroundColor: '#6B7280' },
   nearMeBtnText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 13 },
+  nearMeRadiusWrap: {
+    position: 'relative',
+    zIndex: 24,
+  },
+  nearMeRadiusBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 999,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  nearMeRadiusBtnOpen: {
+    borderColor: '#0EA5A4',
+  },
+  nearMeRadiusBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  nearMeRadiusMenu: {
+    position: 'absolute',
+    top: 44,
+    left: 0,
+    minWidth: 108,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
+    elevation: 12,
+    zIndex: 30,
+  },
+  nearMeRadiusOption: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  nearMeRadiusOptionActive: {
+    backgroundColor: 'rgba(14,165,164,0.08)',
+  },
+  nearMeRadiusOptionText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  nearMeRadiusBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 21,
+  },
   nearMeError: {
     backgroundColor: 'rgba(239,68,68,0.9)', color: '#FFFFFF',
     fontSize: 11, fontWeight: '600', paddingHorizontal: 10, paddingVertical: 5,

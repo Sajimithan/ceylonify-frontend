@@ -11,6 +11,7 @@ import { GET_LISTING_DETAIL, ME_QUERY, RELATED_LISTINGS_QUERY, HOST_BADGE_QUERY 
 import { MY_SAVED_LISTINGS, SAVE_LISTING, UNSAVE_LISTING } from "./host/saved.gql";
 import { IS_GOING, MARK_GOING, UNMARK_GOING } from "./going.gql";
 import { LISTING_EXPERIENCES } from "./experiences.gql";
+import { ExperienceReviewCard } from "../components/ExperienceReviewCard";
 import { REPORT_LISTING } from "./report.gql";
 import { formatListingPriceSummary, getListingPriceTiers, listingHasPrice } from "../lib/listingPrice";
 
@@ -192,7 +193,11 @@ export function ListingDetail() {
   const { data: isGoingData, refetch: refetchGoing } = useQuery(IS_GOING, { variables: { listingId: id }, skip: !id });
   const [markGoing] = useMutation(MARK_GOING);
   const [unmarkGoing] = useMutation(UNMARK_GOING);
-  const { data: experiencesData } = useQuery(LISTING_EXPERIENCES, { variables: { listingId: id }, skip: !id });
+  const viewerUid = meData?.me?.firebaseUid;
+  const { data: experiencesData, refetch: refetchExperiences } = useQuery(LISTING_EXPERIENCES, {
+    variables: { listingId: id, viewerUid: viewerUid ?? null },
+    skip: !id,
+  });
   const hostUid: string | undefined = listingData?.listing?.createdBy;
   const { data: hostBadgeData } = useQuery(HOST_BADGE_QUERY, { variables: { firebaseUid: hostUid ?? "" }, skip: !hostUid });
   const [reportListing] = useMutation(REPORT_LISTING);
@@ -596,31 +601,12 @@ export function ListingDetail() {
                 <span className="text-slate-500 text-sm font-semibold">{avgRating} / 5 ({experiences.length} review{experiences.length !== 1 ? "s" : ""})</span>
               </div>
               <div className="space-y-4">
-                {experiences.map((exp: { id: string; rating: number; text: string; imageUrls: string[]; createdAt: string; user?: { displayName?: string; avatarUrl?: string } }) => (
-                  <div key={exp.id} className="bg-white rounded-xl shadow p-5">
-                    <div className="flex items-center gap-3 mb-2">
-                      {exp.user?.avatarUrl ? (
-                        <img src={exp.user.avatarUrl} alt={exp.user.displayName ?? "Traveler"} className="w-8 h-8 rounded-full object-cover" />
-                      ) : (
-                        <div className="w-8 h-8 rounded-full bg-brand-100 flex items-center justify-center text-xs font-bold text-brand-600">
-                          {(exp.user?.displayName ?? "T").slice(0, 1).toUpperCase()}
-                        </div>
-                      )}
-                      <div>
-                        <div className="text-sm font-semibold text-slate-700">{exp.user?.displayName ?? "Traveler"}</div>
-                        <div className="text-[10px] text-slate-400">{new Date(exp.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>
-                      </div>
-                      <div className="ml-auto text-amber-400 text-sm">{"⭐".repeat(exp.rating)}</div>
-                    </div>
-                    <p className="text-sm text-slate-600 leading-relaxed">{exp.text}</p>
-                    {exp.imageUrls.length > 0 && (
-                      <div className="flex gap-2 mt-3 overflow-x-auto">
-                        {exp.imageUrls.map((url, i) => (
-                          <img key={i} src={url} alt={`Experience photo ${i + 1}`} className="h-20 w-20 object-cover rounded-lg flex-shrink-0" />
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                {experiences.map((exp) => (
+                  <ExperienceReviewCard
+                    key={exp.id}
+                    review={exp}
+                    onUpdated={() => void refetchExperiences()}
+                  />
                 ))}
               </div>
             </div>

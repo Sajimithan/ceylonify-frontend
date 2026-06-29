@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { useQuery } from "@apollo/client/react";
+import { Link } from "react-router-dom";
 import {
   BarChart,
   Bar,
@@ -14,9 +16,15 @@ import {
   BuildingOffice2Icon,
   CheckCircleIcon,
   ClockIcon,
+  StarIcon,
+  ChatBubbleLeftRightIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
 } from "@heroicons/react/24/outline";
 import { DashboardLayout } from "../../layouts/DashboardLayout";
+import { ExperienceReviewCard } from "../../components/ExperienceReviewCard";
 import { MY_LISTINGS } from "./listings.gql";
+import { HOST_PAST_EVENT_REVIEWS } from "./hostAnalytics.gql";
 
 type Listing = {
   id: string;
@@ -29,14 +37,53 @@ type Listing = {
 
 type MyListingsData = { myListings: Listing[] };
 
+type HostEventReviewGroup = {
+  averageRating?: number | null;
+  reviewCount: number;
+  event: {
+    id: string;
+    title: string;
+    imageUrl?: string;
+    placeName?: string;
+    startDateTime?: string;
+    type: string;
+    viewCount?: number;
+  };
+  reviews: Parameters<typeof ExperienceReviewCard>[0]["review"][];
+};
+
+type HostPastEventReviewsData = {
+  hostPastEventReviews: HostEventReviewGroup[];
+};
+
 export function HostAnalytics() {
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [reviewsOnly, setReviewsOnly] = useState(false);
+
   const { data, loading } = useQuery<MyListingsData>(MY_LISTINGS);
+  const {
+    data: reviewsData,
+    loading: reviewsLoading,
+    refetch: refetchReviews,
+  } = useQuery<HostPastEventReviewsData>(HOST_PAST_EVENT_REVIEWS);
+
   const listings: Listing[] = data?.myListings ?? [];
+  const eventGroups = reviewsData?.hostPastEventReviews ?? [];
 
   const totalViews = listings.reduce((s, l) => s + (l.viewCount ?? 0), 0);
   const approved = listings.filter((l) => l.status === "APPROVED").length;
   const pending = listings.filter((l) => l.status === "PENDING").length;
   const rejected = listings.filter((l) => l.status === "REJECTED").length;
+
+  const allReviews = eventGroups.flatMap((group) => group.reviews);
+  const totalReviews = allReviews.length;
+  const overallAvgRating = totalReviews
+    ? (allReviews.reduce((sum, review) => sum + review.rating, 0) / totalReviews).toFixed(1)
+    : null;
+
+  const visibleGroups = reviewsOnly
+    ? eventGroups.filter((group) => group.reviewCount > 0)
+    : eventGroups;
 
   const kpiCards = [
     {
@@ -87,8 +134,17 @@ export function HostAnalytics() {
       premium: l.isPremium,
     }));
 
+  function toggleExpanded(eventId: string) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(eventId)) next.delete(eventId);
+      else next.add(eventId);
+      return next;
+    });
+  }
+
   return (
-    <DashboardLayout title="Analytics" subtitle="Your listing performance">
+    <DashboardLayout title="Analytics" subtitle="Your listing performance and traveler feedback">
       <div className="mx-auto w-full max-w-4xl">
 
         {loading && (
@@ -124,6 +180,191 @@ export function HostAnalytics() {
             {pending} listing{pending !== 1 ? "s" : ""} pending admin review.
           </div>
         )}
+
+        {/* Event Reviews & Feedback */}
+        <div className="bg-white rounded-xl shadow p-6 mb-6">
+          <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+            <div>
+              <h2 className="text-slate-700 text-sm font-bold flex items-center gap-2">
+                <ChatBubbleLeftRightIcon className="w-4 h-4 text-brand-500" />
+                Past Event Reviews
+              </h2>
+              <p className="text-slate-400 text-xs mt-0.5">
+                Traveler ratings and feedback on your completed events — reply or react directly.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              {overallAvgRating && (
+                <div className="rounded-lg bg-amber-50 px-3 py-2 text-center border border-amber-100">
+                  <div className="text-lg font-bold text-amber-600">{overallAvgRating}</div>
+                  <div className="text-[10px] font-bold uppercase text-amber-500 tracking-wide">
+                    Avg rating
+                  </div>
+                </div>
+              )}
+              <div className="rounded-lg bg-brand-50 px-3 py-2 text-center border border-brand-100">
+                <div className="text-lg font-bold text-brand-600">{totalReviews}</div>
+                <div className="text-[10px] font-bold uppercase text-brand-500 tracking-wide">
+                  Reviews
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-500 mb-4 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={reviewsOnly}
+              onChange={(e) => setReviewsOnly(e.target.checked)}
+              className="rounded border-slate-300 text-brand-500 focus:ring-brand-500"
+            />
+            Show only events with reviews
+          </label>
+
+          {reviewsLoading && (
+            <div className="py-8 text-center text-slate-400 text-sm font-semibold">
+              Loading event reviews…
+            </div>
+          )}
+
+          {!reviewsLoading && visibleGroups.length === 0 && (
+            <div className="py-10 text-center">
+              <StarIcon className="w-10 h-10 text-slate-200 mx-auto mb-3" />
+              <p className="text-slate-500 font-semibold text-sm">
+                {reviewsOnly ? "No past events with reviews yet." : "No past events yet."}
+              </p>
+              <p className="text-slate-400 text-xs mt-1">
+                Reviews appear here after travelers share experiences on completed events.
+              </p>
+            </div>
+          )}
+
+          <div className="space-y-4">
+            {visibleGroups.map((group) => {
+              const isExpanded = expandedIds.has(group.event.id);
+              const hasReviews = group.reviewCount > 0;
+              const previewReview = group.reviews[0];
+              const hiddenReviews = group.reviews.slice(1);
+
+              return (
+                <div
+                  key={group.event.id}
+                  className="rounded-xl border border-slate-100 overflow-hidden"
+                >
+                  <div className="flex items-stretch bg-slate-50">
+                    {group.event.imageUrl ? (
+                      <img
+                        src={group.event.imageUrl}
+                        alt={group.event.title}
+                        className="w-24 h-24 object-cover flex-shrink-0"
+                      />
+                    ) : (
+                      <div className="w-24 h-24 bg-brand-50 flex items-center justify-center text-2xl flex-shrink-0">
+                        🎉
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0 p-4">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <h3 className="font-bold text-slate-800 text-sm truncate">
+                            {group.event.title}
+                          </h3>
+                          {group.event.startDateTime && (
+                            <p className="text-[11px] text-slate-400 mt-0.5">
+                              🗓{" "}
+                              {new Date(group.event.startDateTime).toLocaleDateString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                              })}
+                            </p>
+                          )}
+                          {group.event.placeName && (
+                            <p className="text-[11px] text-slate-400 truncate">
+                              📍 {group.event.placeName}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          {hasReviews ? (
+                            <>
+                              <span className="text-amber-500 text-xs font-bold">
+                                {"⭐".repeat(Math.round(group.averageRating ?? 0))}
+                              </span>
+                              <span className="text-[10px] text-slate-500 font-semibold">
+                                {(group.averageRating ?? 0).toFixed(1)} · {group.reviewCount} review
+                                {group.reviewCount !== 1 ? "s" : ""}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 italic">No reviews yet</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 mt-3">
+                        {hasReviews && (
+                          <button
+                            type="button"
+                            onClick={() => toggleExpanded(group.event.id)}
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-700"
+                          >
+                            {isExpanded ? (
+                              <>
+                                <ChevronUpIcon className="w-3.5 h-3.5" />
+                                Hide reviews
+                              </>
+                            ) : (
+                              <>
+                                <ChevronDownIcon className="w-3.5 h-3.5" />
+                                {group.reviewCount === 1
+                                  ? "View review"
+                                  : `View all ${group.reviewCount} reviews`}
+                              </>
+                            )}
+                          </button>
+                        )}
+                        <Link
+                          to={`/listing/${group.event.id}`}
+                          className="text-xs font-semibold text-slate-500 hover:text-brand-600"
+                        >
+                          Open listing →
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+
+                  {hasReviews && (isExpanded || group.reviewCount === 1) && (
+                    <div className="p-4 space-y-3 bg-white border-t border-slate-100">
+                      <ExperienceReviewCard
+                        review={previewReview}
+                        onUpdated={() => void refetchReviews()}
+                      />
+                      {isExpanded &&
+                        hiddenReviews.map((review) => (
+                          <ExperienceReviewCard
+                            key={review.id}
+                            review={review}
+                            onUpdated={() => void refetchReviews()}
+                          />
+                        ))}
+                      {!isExpanded && hiddenReviews.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => toggleExpanded(group.event.id)}
+                          className="text-xs font-semibold text-brand-600"
+                        >
+                          +{hiddenReviews.length} more review
+                          {hiddenReviews.length !== 1 ? "s" : ""}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
 
         {/* Views Bar Chart */}
         {listings.length > 0 && (

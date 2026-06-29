@@ -44,6 +44,9 @@ function resolveRoute(type: string, resourceId?: string): string | null {
       return "/admin/pending";
     case "NEW_EVENT_NEARBY":
       return "/browse";
+    case "EXPERIENCE_REVIEW":
+    case "EXPERIENCE_REPLY":
+      return resourceId ? `/listing/${resourceId}` : "/browse";
     default:
       return null;
   }

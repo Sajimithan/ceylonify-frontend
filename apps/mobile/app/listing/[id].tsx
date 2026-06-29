@@ -11,6 +11,7 @@ import { useGraphQL, gqlFetch } from '../../src/hooks/useGraphQL';
 import { WebView } from 'react-native-webview';
 import { auth } from '../../src/lib/firebase';
 import { formatListingPriceSummary, getListingPriceTiers, listingHasPrice } from '../../src/lib/listingPrice';
+import { ExperienceReviewCard } from '../../src/components/ExperienceReviewCard';
 
 const API_BASE = (process.env.EXPO_PUBLIC_API_URL ?? 'http://10.0.2.2:3000/graphql').replace('/graphql', '');
 const WEATHER_KEY = process.env.EXPO_PUBLIC_WEATHER_API_KEY;
@@ -42,10 +43,11 @@ const MARK_GOING_MUTATION = `mutation MarkGoing($listingId: ID!) { markGoing(lis
 const UNMARK_GOING_MUTATION = `mutation UnmarkGoing($listingId: ID!) { unmarkGoing(listingId: $listingId) }`;
 
 const LISTING_EXPERIENCES_QUERY = `
-  query ListingExperiences($listingId: ID!) {
-    listingExperiences(listingId: $listingId) {
-      id rating text imageUrls createdAt
+  query ListingExperiences($listingId: ID!, $viewerUid: String) {
+    listingExperiences(listingId: $listingId, viewerUid: $viewerUid) {
+      id rating text imageUrls createdAt likeCount likedByMe replyCount
       user { displayName avatarUrl }
+      replies { id senderUid authorRole message createdAt }
     }
   }
 `;
@@ -171,8 +173,11 @@ export default function ListingDetailScreen() {
 
   const { data, loading, error } = useGraphQL<{ listing: any }>(GET_LISTING_QUERY, { id }, { pollInterval: 30_000 });
   const { data: savedData } = useGraphQL<{ savedListings: { id: string }[] }>(SAVED_LISTINGS_QUERY);
+  const viewerUid = auth?.currentUser?.uid;
   const { data: expData, refetch: refetchExps } = useGraphQL<{ listingExperiences: any[] }>(
-    LISTING_EXPERIENCES_QUERY, { listingId: id }, { pollInterval: 30_000 },
+    LISTING_EXPERIENCES_QUERY,
+    { listingId: id, viewerUid: viewerUid ?? null },
+    { pollInterval: 30_000 },
   );
 
   useEffect(() => {
@@ -473,43 +478,14 @@ export default function ListingDetailScreen() {
           {experiences.length === 0 ? (
             <Text style={styles.noExperiencesText}>No experiences shared yet. Be the first!</Text>
           ) : (
-            experiences.map((exp: any) => {
-              const expAvatar = fixImageUrl(exp.user?.avatarUrl);
-              return (
-                <View key={exp.id} style={expStyles.card}>
-                  <View style={expStyles.header}>
-                    {expAvatar ? (
-                      <Image source={{ uri: expAvatar }} style={expStyles.avatar} />
-                    ) : (
-                      <View style={expStyles.avatarPlaceholder}>
-                        <Text style={expStyles.avatarInitial}>
-                          {(exp.user?.displayName ?? 'T').charAt(0).toUpperCase()}
-                        </Text>
-                      </View>
-                    )}
-                    <View style={{ flex: 1 }}>
-                      <Text style={expStyles.userName}>{exp.user?.displayName ?? 'Traveler'}</Text>
-                      <Text style={expStyles.date}>
-                        {new Date(exp.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </Text>
-                    </View>
-                    <StarRow rating={exp.rating} />
-                  </View>
-                  <Text style={expStyles.text}>{exp.text}</Text>
-                  {(exp.imageUrls ?? []).length > 0 && (
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
-                      {exp.imageUrls.map((imgUrl: string, i: number) => (
-                        <Image
-                          key={i}
-                          source={{ uri: fixImageUrl(imgUrl) ?? imgUrl }}
-                          style={expStyles.photo}
-                        />
-                      ))}
-                    </ScrollView>
-                  )}
-                </View>
-              );
-            })
+            experiences.map((exp: any) => (
+              <ExperienceReviewCard
+                key={exp.id}
+                review={exp}
+                fixImageUrl={fixImageUrl}
+                onUpdated={() => void refetchExps()}
+              />
+            ))
           )}
 
           <View style={{ height: 120 }} />

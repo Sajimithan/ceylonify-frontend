@@ -8,6 +8,7 @@ import { ChevronLeft, MapPin, CalendarDays, Star } from 'lucide-react-native';
 import { useGraphQL } from '../../src/hooks/useGraphQL';
 import { formatListingPriceSummary, listingHasPrice } from '../../src/lib/listingPrice';
 import { getHostPublicInitial, getHostPublicName } from '../../src/lib/hostName';
+import { ExperienceReviewCard } from '../../src/components/ExperienceReviewCard';
 
 const API_BASE = (process.env.EXPO_PUBLIC_API_URL ?? 'http://10.0.2.2:3000/graphql').replace('/graphql', '');
 
@@ -22,7 +23,11 @@ const HOST_PROFILE_QUERY = `
       firebaseUid displayName businessName avatarUrl badgeLevel approvedCount createdAt
       upcomingEvents { id title imageUrl price priceTiers { label price description } placeName startDateTime type goingCount }
       pastEvents { id title imageUrl price priceTiers { label price description } placeName startDateTime type }
-      pastExperiences { id listingId rating text imageUrls createdAt user { displayName avatarUrl } }
+      pastExperiences {
+        id listingId rating text imageUrls createdAt likeCount likedByMe replyCount
+        user { displayName avatarUrl }
+        replies { id senderUid authorRole message createdAt }
+      }
     }
   }
 `;
@@ -41,44 +46,6 @@ function StarRow({ rating }: { rating: number }) {
       {[1, 2, 3, 4, 5].map((s) => (
         <Star key={s} size={12} color={s <= rating ? '#F59E0B' : '#D1D5DB'} fill={s <= rating ? '#F59E0B' : 'none'} />
       ))}
-    </View>
-  );
-}
-
-function ExperienceReview({ exp }: { exp: any }) {
-  const expAvatar = fixImageUrl(exp.user?.avatarUrl);
-  return (
-    <View style={styles.expCard}>
-      <View style={styles.expHeader}>
-        {expAvatar ? (
-          <Image source={{ uri: expAvatar }} style={styles.expAvatar} />
-        ) : (
-          <View style={styles.expAvatarPlaceholder}>
-            <Text style={styles.expAvatarInitial}>
-              {(exp.user?.displayName ?? 'T').charAt(0).toUpperCase()}
-            </Text>
-          </View>
-        )}
-        <View style={{ flex: 1 }}>
-          <Text style={styles.expUser}>{exp.user?.displayName ?? 'Traveler'}</Text>
-          <Text style={styles.expDate}>
-            {new Date(exp.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-          </Text>
-        </View>
-        <StarRow rating={exp.rating} />
-      </View>
-      <Text style={styles.expText}>{exp.text}</Text>
-      {(exp.imageUrls ?? []).length > 0 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
-          {exp.imageUrls.map((imgUrl: string, i: number) => (
-            <Image
-              key={i}
-              source={{ uri: fixImageUrl(imgUrl) ?? imgUrl }}
-              style={styles.expPhoto}
-            />
-          ))}
-        </ScrollView>
-      )}
     </View>
   );
 }
@@ -306,9 +273,9 @@ export default function HostProfileScreen() {
                       />
                       {previewReview && (
                         <View style={styles.expThread}>
-                          <ExperienceReview exp={previewReview} />
+                          <ExperienceReviewCard review={previewReview} fixImageUrl={fixImageUrl} />
                           {isExpanded && hiddenReviews.map((exp: any) => (
-                            <ExperienceReview key={exp.id} exp={exp} />
+                            <ExperienceReviewCard key={exp.id} review={exp} fixImageUrl={fixImageUrl} />
                           ))}
                         </View>
                       )}

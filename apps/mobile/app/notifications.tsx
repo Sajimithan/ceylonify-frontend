@@ -10,7 +10,7 @@ import { useTheme } from '../src/context/ThemeContext';
 
 const MY_NOTIFICATIONS_QUERY = `
   query MyNotifications {
-    myNotifications { id title body type read createdAt }
+    myNotifications { id title body type resourceId read createdAt }
   }
 `;
 const MARK_READ = `mutation MarkNotificationRead($notificationId: ID!) { markNotificationRead(notificationId: $notificationId) }`;
@@ -35,6 +35,11 @@ function NotifIcon({ type }: { type: string }) {
   if (type === 'ITINERARY') return (
     <View style={[styles.iconBox, { backgroundColor: '#DCFCE7' }]}>
       <Calendar size={18} color="#16A34A" />
+    </View>
+  );
+  if (type === 'EXPERIENCE_REVIEW' || type === 'EXPERIENCE_REPLY') return (
+    <View style={[styles.iconBox, { backgroundColor: '#FEE2E2' }]}>
+      <Heart size={18} color="#EF4444" />
     </View>
   );
   return (
@@ -64,6 +69,12 @@ export default function NotificationsScreen() {
     if (!notif.read) {
       await gqlFetch(MARK_READ, { notificationId: notif.id }).catch(() => {});
       refetch();
+    }
+    if (
+      (notif.type === 'EXPERIENCE_REVIEW' || notif.type === 'EXPERIENCE_REPLY')
+      && notif.resourceId
+    ) {
+      router.push(`/listing/${notif.resourceId}` as any);
     }
   }
 

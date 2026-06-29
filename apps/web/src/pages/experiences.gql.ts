@@ -66,19 +66,50 @@ export const MY_EXPERIENCES = gql`
 `;
 
 export const LISTING_EXPERIENCES = gql`
-  query ListingExperiences($listingId: ID!) {
-    listingExperiences(listingId: $listingId) {
+  query ListingExperiences($listingId: ID!, $viewerUid: String) {
+    listingExperiences(listingId: $listingId, viewerUid: $viewerUid) {
       id
       listingId
       rating
       text
       imageUrls
       createdAt
+      likeCount
+      likedByMe
+      replyCount
       user {
         firebaseUid
         displayName
         avatarUrl
       }
+      replies {
+        id
+        senderUid
+        authorRole
+        message
+        createdAt
+      }
+    }
+  }
+`;
+
+export const TOGGLE_EXPERIENCE_LIKE = gql`
+  mutation ToggleExperienceLike($experienceId: ID!) {
+    toggleExperienceLike(experienceId: $experienceId) {
+      liked
+      likeCount
+    }
+  }
+`;
+
+export const REPLY_TO_EXPERIENCE = gql`
+  mutation ReplyToExperience($experienceId: ID!, $message: String!) {
+    replyToExperience(experienceId: $experienceId, message: $message) {
+      id
+      senderUid
+      authorRole
+      message
+      createdAt
     }
   }
 `;

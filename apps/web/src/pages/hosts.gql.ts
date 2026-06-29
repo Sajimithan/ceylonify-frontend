@@ -51,10 +51,20 @@ export const HOST_PUBLIC_PROFILE = gql`
         text
         imageUrls
         createdAt
+        likeCount
+        likedByMe
+        replyCount
         user {
           firebaseUid
           displayName
           avatarUrl
+        }
+        replies {
+          id
+          senderUid
+          authorRole
+          message
+          createdAt
         }
       }
     }

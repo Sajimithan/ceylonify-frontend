@@ -5,6 +5,7 @@ import { DashboardLayout } from "../layouts/DashboardLayout";
 import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 import { HOST_PUBLIC_PROFILE } from "./hosts.gql";
 import { getHostPublicInitial, getHostPublicName } from "../lib/hostName";
+import { ExperienceReviewCard } from "../components/ExperienceReviewCard";
 
 const BADGE_EMOJI: Record<string, string> = { DIAMOND: "💎", GOLD: "🥇", SILVER: "🥈", BRONZE: "🥉", NONE: "" };
 const BADGE_COLOR: Record<string, string> = {
@@ -22,7 +23,11 @@ type Experience = {
   text: string;
   imageUrls: string[];
   createdAt: string;
+  likeCount?: number;
+  likedByMe?: boolean;
+  replyCount?: number;
   user?: { displayName?: string; avatarUrl?: string };
+  replies?: { id: string; senderUid: string; authorRole: string; message: string; createdAt: string }[];
 };
 
 type Listing = {
@@ -34,32 +39,6 @@ type Listing = {
   price?: string;
   placeName?: string;
 };
-
-function ExperienceCard({ exp }: { exp: Experience }) {
-  return (
-    <div className="p-4">
-      <div className="flex items-center gap-2 mb-1">
-        {exp.user?.avatarUrl ? (
-          <img src={exp.user.avatarUrl} alt="" className="w-6 h-6 rounded-full object-cover" />
-        ) : (
-          <div className="w-6 h-6 rounded-full bg-brand-100 flex items-center justify-center text-[10px] font-bold text-brand-600">
-            {(exp.user?.displayName ?? "T").slice(0, 1).toUpperCase()}
-          </div>
-        )}
-        <span className="text-xs font-semibold text-slate-600">{exp.user?.displayName ?? "Traveler"}</span>
-        <span className="ml-auto text-amber-400 text-xs">{"⭐".repeat(exp.rating)}</span>
-      </div>
-      <p className="text-sm text-slate-500 leading-relaxed">{exp.text}</p>
-      {exp.imageUrls.length > 0 && (
-        <div className="flex gap-2 mt-2 overflow-x-auto">
-          {exp.imageUrls.map((url, i) => (
-            <img key={i} src={url} alt="" className="h-16 w-16 object-cover rounded-lg flex-shrink-0" />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 export function HostPublicProfile() {
   const { firebaseUid } = useParams<{ firebaseUid: string }>();
@@ -220,10 +199,12 @@ export function HostPublicProfile() {
                         {exps.length === 0 ? (
                           <div className="px-4 py-3 text-xs text-slate-400 italic">No experiences shared yet for this event.</div>
                         ) : (
-                          <div className="divide-y divide-slate-50">
-                            {previewReview && <ExperienceCard exp={previewReview} />}
+                          <div className="divide-y divide-slate-50 px-2 pb-2">
+                            {previewReview && (
+                              <ExperienceReviewCard review={previewReview} />
+                            )}
                             {isExpanded && hiddenReviews.map((exp) => (
-                              <ExperienceCard key={exp.id} exp={exp} />
+                              <ExperienceReviewCard key={exp.id} review={exp} />
                             ))}
                           </div>
                         )}
