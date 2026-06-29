@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import {
-  View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert,
+  View, Text, TouchableOpacity, ScrollView, StyleSheet,
   Image, Modal, TextInput, ActivityIndicator,
 } from 'react-native';
+import { useAppAlert } from '../../src/components/AppAlert';
 import {
   Settings, CreditCard, Bell, Shield, HelpCircle, LogOut,
   ChevronRight, Crown, Camera, Pencil, X, Check,
@@ -11,6 +12,7 @@ import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { auth } from '../../src/lib/firebase';
 import { useGraphQL, gqlFetch } from '../../src/hooks/useGraphQL';
+import { useTheme } from '../../src/context/ThemeContext';
 
 const API_BASE = (process.env.EXPO_PUBLIC_API_URL ?? 'http://10.0.2.2:3000/graphql').replace('/graphql', '');
 
@@ -52,6 +54,7 @@ const avatarStyles = StyleSheet.create({
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
   const user = auth?.currentUser;
 
   const { data, refetch } = useGraphQL<{ me: { role: string; isPremium: boolean; displayName?: string; avatarUrl?: string } | null }>(ME_QUERY);
@@ -65,6 +68,7 @@ export default function ProfileScreen() {
     ? new Date(user.metadata.creationTime).toLocaleDateString('en-US', { year: 'numeric', month: 'long' })
     : null;
 
+  const { show: showAlert, alertEl } = useAppAlert();
   // Name editing
   const [nameModalVisible, setNameModalVisible] = useState(false);
   const [nameInput, setNameInput] = useState('');
@@ -86,7 +90,7 @@ export default function ProfileScreen() {
       await refetch();
       setNameModalVisible(false);
     } catch {
-      Alert.alert('Error', 'Could not update name. Please try again.');
+      showAlert({ type: 'error', title: 'Could Not Update', message: 'Could not update name. Please try again.' });
     } finally {
       setNameSaving(false);
     }
@@ -95,7 +99,7 @@ export default function ProfileScreen() {
   async function handleAvatarPick() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission required', 'Allow photo library access to set a profile picture.');
+      showAlert({ type: 'warning', title: 'Permission Required', message: 'Allow photo library access to set a profile picture.' });
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -118,27 +122,28 @@ export default function ProfileScreen() {
       await gqlFetch(UPDATE_PROFILE, { avatarUrl });
       await refetch();
     } catch {
-      Alert.alert('Error', 'Could not upload photo. Please try again.');
+      showAlert({ type: 'error', title: 'Upload Failed', message: 'Could not upload photo. Please try again.' });
     } finally {
       setAvatarUploading(false);
     }
   }
 
-  const handleLogout = async () => {
-    Alert.alert('Logout', 'Are you sure you want to logout?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Logout', style: 'destructive',
-        onPress: async () => {
-          try {
-            await auth!.signOut();
-            router.replace('/(auth)/landing');
-          } catch {
-            Alert.alert('Error', 'Failed to logout. Please try again.');
-          }
-        },
+  const handleLogout = () => {
+    showAlert({
+      type: 'confirm',
+      title: 'Logout',
+      message: 'Are you sure you want to logout?',
+      confirmText: 'Logout',
+      cancelText: 'Cancel',
+      onConfirm: async () => {
+        try {
+          await auth!.signOut();
+          router.replace('/(auth)/landing');
+        } catch {
+          showAlert({ type: 'error', title: 'Logout Failed', message: 'Could not logout. Please try again.' });
+        }
       },
-    ]);
+    });
   };
 
   const menuItems = [
@@ -147,14 +152,15 @@ export default function ProfileScreen() {
     { icon: <Bell size={20} color="#0EA5A4" />, label: 'Notifications', route: '/notifications' as any },
     { icon: <CreditCard size={20} color="#0EA5A4" />, label: 'Payments & Payouts', route: null },
     { icon: <Shield size={20} color="#0EA5A4" />, label: 'Privacy & Security', route: null },
-    { icon: <HelpCircle size={20} color="#0EA5A4" />, label: 'Help Center', route: null },
+    { icon: <HelpCircle size={20} color="#0EA5A4" />, label: 'Help Center', route: '/help-center' as any },
   ];
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {alertEl}
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
           <View style={styles.profileSection}>
             {/* Avatar with camera button */}
             <View style={styles.avatarWrapper}>
@@ -173,14 +179,14 @@ export default function ProfileScreen() {
 
             {/* Name with edit button */}
             <View style={styles.nameRow}>
-              <Text style={styles.name}>{displayName}</Text>
+              <Text style={[styles.name, { color: colors.text }]}>{displayName}</Text>
               <TouchableOpacity onPress={openNameEdit} style={styles.editNameBtn}>
                 <Pencil size={14} color="#0EA5A4" />
               </TouchableOpacity>
             </View>
 
             {user?.email && (
-              <Text style={styles.email}>{user.email}</Text>
+              <Text style={[styles.email, { color: colors.textMuted }]}>{user.email}</Text>
             )}
 
             <View style={styles.badgeRow}>
@@ -198,7 +204,7 @@ export default function ProfileScreen() {
             </View>
 
             {memberSince && (
-              <Text style={styles.memberSince}>Member since {memberSince}</Text>
+              <Text style={[styles.memberSince, { color: colors.textMuted }]}>Member since {memberSince}</Text>
             )}
           </View>
         </View>
@@ -210,45 +216,45 @@ export default function ProfileScreen() {
               key={idx}
               onPress={() => item.route && router.push(item.route)}
               activeOpacity={0.7}
-              style={styles.menuItem}
+              style={[styles.menuItem, { backgroundColor: colors.surface, borderColor: colors.border }]}
             >
               <View style={styles.menuItemLeft}>
                 <View style={[styles.menuIconContainer, item.isPremium ? styles.premiumIconBg : styles.defaultIconBg]}>
                   {item.icon}
                 </View>
-                <Text style={styles.menuItemLabel}>{item.label}</Text>
+                <Text style={[styles.menuItemLabel, { color: colors.text }]}>{item.label}</Text>
               </View>
-              <ChevronRight size={20} color="#E5E7EB" />
+              <ChevronRight size={20} color={colors.border} />
             </TouchableOpacity>
           ))}
 
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <TouchableOpacity style={[styles.logoutButton, { backgroundColor: colors.surface, borderColor: 'rgba(239,68,68,0.25)' }]} onPress={handleLogout}>
             <LogOut size={20} color="#EF4444" />
             <Text style={styles.logoutText}>Logout</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.footer}>
-          <Text style={styles.versionText}>Ceylonify v1.0.0</Text>
+          <Text style={[styles.versionText, { color: colors.textMuted }]}>Ceylonify v1.0.0</Text>
         </View>
       </ScrollView>
 
       {/* Name edit modal */}
       <Modal visible={nameModalVisible} transparent animationType="fade" onRequestClose={() => setNameModalVisible(false)}>
         <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
+          <View style={[styles.modalCard, { backgroundColor: colors.surface }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Edit Name</Text>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Edit Name</Text>
               <TouchableOpacity onPress={() => setNameModalVisible(false)}>
-                <X size={20} color="#667085" />
+                <X size={20} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
             <TextInput
-              style={styles.modalInput}
+              style={[styles.modalInput, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.text }]}
               value={nameInput}
               onChangeText={setNameInput}
               placeholder="Your display name"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={colors.textMuted}
               autoFocus
               maxLength={50}
             />

@@ -12,7 +12,7 @@ export default function LandingScreen() {
     <View style={styles.container}>
       {/* Hero background */}
       <Image
-        source={{ uri: 'https://images.unsplash.com/photo-1544413647-79753c52958d?q=80&w=900' }}
+        source={require('../../assets/images/landing_bg.png')}
         style={styles.bg}
         contentFit="cover"
       />

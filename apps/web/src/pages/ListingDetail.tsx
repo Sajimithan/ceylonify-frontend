@@ -12,6 +12,7 @@ import { MY_SAVED_LISTINGS, SAVE_LISTING, UNSAVE_LISTING } from "./host/saved.gq
 import { IS_GOING, MARK_GOING, UNMARK_GOING } from "./going.gql";
 import { LISTING_EXPERIENCES } from "./experiences.gql";
 import { REPORT_LISTING } from "./report.gql";
+import { formatListingPriceSummary, getListingPriceTiers, listingHasPrice } from "../lib/listingPrice";
 
 type WeatherData = {
   main: { temp: number; feels_like: number; humidity: number };
@@ -387,12 +388,30 @@ export function ListingDetail() {
                 )}
               </div>
 
-              {listing.price && (
+              {listingHasPrice(listing) && (
                 <div>
                   <div className="text-xs text-slate-400 font-bold uppercase">Price</div>
-                  <div className="text-2xl font-bold text-sky-600">
-                    LKR {Number(listing.price).toLocaleString()}
-                  </div>
+                  {getListingPriceTiers(listing).length > 0 ? (
+                    <div className="mt-2 space-y-2">
+                      {getListingPriceTiers(listing).map((tier) => (
+                        <div key={tier.label} className="flex items-start justify-between gap-3 bg-slate-50 rounded-lg px-3 py-2">
+                          <div>
+                            <div className="text-sm font-bold text-slate-700">{tier.label}</div>
+                            {tier.description ? (
+                              <div className="text-xs text-slate-500 mt-0.5">{tier.description}</div>
+                            ) : null}
+                          </div>
+                          <div className="text-sm font-bold text-sky-600 whitespace-nowrap">
+                            LKR {Number(tier.price).toLocaleString()}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-2xl font-bold text-sky-600">
+                      {formatListingPriceSummary(listing)}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -552,9 +571,9 @@ export function ListingDetail() {
                     <div className="text-[10px] text-slate-400 mt-0.5">
                       {r.type.charAt(0) + r.type.slice(1).toLowerCase()}
                     </div>
-                    {r.price && (
+                    {listingHasPrice(r) && (
                       <div className="text-xs font-bold text-sky-600 mt-1">
-                        LKR {Number(r.price).toLocaleString()}
+                        {formatListingPriceSummary(r)}
                       </div>
                     )}
                   </div>

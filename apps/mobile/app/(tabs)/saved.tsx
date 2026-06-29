@@ -1,16 +1,33 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  Image, ActivityIndicator, RefreshControl, Alert, Modal, TextInput,
+  Image, ActivityIndicator, RefreshControl, Modal, TextInput,
   KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { useAppAlert } from '../../src/components/AppAlert';
+import { ExperienceShareModal, type ShareableExperience } from '../../src/components/ExperienceShareModal';
 import {
   Heart, MapPin, Trash2, Bookmark, Calendar, Plus, X, Send,
-  Save, MessageSquare, ChevronRight,
+  Save, MessageSquare, ChevronRight, Star, Pencil, Share2,
 } from 'lucide-react-native';
 import { useGraphQL, gqlFetch } from '../../src/hooks/useGraphQL';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { getCurrentUserUid } from '../../src/lib/firebase';
+import {
+  type SavedRoutePlan,
+  groupByDate,
+  getMappingForItem,
+  getMappingForCustom,
+  buildItineraryDayEntries,
+  detectItineraryChanges,
+  loadRoutePlan,
+  saveRoutePlan,
+  clearRoutePlan,
+} from '../../src/lib/routePlan';
+import { useTheme } from '../../src/context/ThemeContext';
+import { formatListingPriceSummary, listingHasPrice } from '../../src/lib/listingPrice';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import * as ImagePicker from 'expo-image-picker';
 
 const API_BASE = (process.env.EXPO_PUBLIC_API_URL ?? 'http://10.0.2.2:3000/graphql').replace('/graphql', '');
 
@@ -30,7 +47,7 @@ function cleanAiText(text: string): string {
 const SAVED_LISTINGS_QUERY = `
   query SavedListings {
     savedListings {
-      id title description type category price placeName imageUrl startDateTime createdAt
+      id title description type category price priceTiers { label price description } placeName imageUrl startDateTime createdAt
     }
   }
 `;
@@ -67,6 +84,27 @@ const SAVED_CHATS_QUERY = `
 `;
 const DELETE_CHAT_MUTATION = `mutation DeleteSavedChat($chatId: ID!) { deleteSavedChat(chatId: $chatId) }`;
 
+const MY_EXPERIENCES_QUERY = `
+  query MyExperiences {
+    myExperiences { id listingId rating text imageUrls createdAt }
+  }
+`;
+const SHARE_EXPERIENCE_MUTATION = `
+  mutation ShareExperience($listingId: ID!, $rating: Int!, $text: String!, $imageUrls: [String!]) {
+    shareExperience(listingId: $listingId, rating: $rating, text: $text, imageUrls: $imageUrls) {
+      id rating text imageUrls createdAt
+    }
+  }
+`;
+const DELETE_EXPERIENCE_MUTATION = `mutation DeleteMyExperience($id: ID!) { deleteMyExperience(id: $id) }`;
+const UPDATE_EXPERIENCE_MUTATION = `
+  mutation UpdateMyExperience($id: ID!, $rating: Int!, $text: String!, $imageUrls: [String!]) {
+    updateMyExperience(id: $id, rating: $rating, text: $text, imageUrls: $imageUrls) {
+      id listingId rating text imageUrls createdAt
+    }
+  }
+`;
+
 const SUGGESTION_CHIPS = [
   'Plan a 3-day trip to Ella',
   '5 days Colombo & Kandy — culture + food',
@@ -74,20 +112,15 @@ const SUGGESTION_CHIPS = [
   '7-day honeymoon in Sri Lanka',
 ];
 
-type PlanListing = { id: string; title: string; imageUrl?: string | null; placeName?: string | null; price?: string | null; type: string };
+type PlanListing = {
+  id: string;
+  title: string;
+  imageUrl?: string | null;
+  placeName?: string | null;
+  price?: string | null;
+  type: string;
+};
 type ChatMessage = { role: 'user' | 'assistant'; content: string; listings?: PlanListing[] };
-
-function groupByDate(items: any[]) {
-  const map: Record<string, any[]> = {};
-  items.forEach((item) => {
-    const key = new Date(item.plannedDate).toLocaleDateString('en-US', {
-      weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
-    });
-    if (!map[key]) map[key] = [];
-    map[key].push(item);
-  });
-  return Object.entries(map).sort(([a], [b]) => new Date(a).getTime() - new Date(b).getTime());
-}
 
 // Render AI message with styled day headers, bullet points, and interactive listing cards
 function AiMessageText({ text, listings }: { text: string; listings?: PlanListing[] }) {
@@ -131,7 +164,9 @@ function AiMessageText({ text, listings }: { text: string; listings?: PlanListin
                   <View style={{ flex: 1 }}>
                     <Text style={aiCardStyles.title} numberOfLines={1}>{matchedListing.title}</Text>
                     {matchedListing.placeName ? <Text style={aiCardStyles.meta} numberOfLines={1}>📍 {matchedListing.placeName}</Text> : null}
-                    {matchedListing.price ? <Text style={aiCardStyles.price}>LKR {matchedListing.price}</Text> : null}
+                    {listingHasPrice(matchedListing)
+                      ? <Text style={aiCardStyles.price}>{formatListingPriceSummary(matchedListing)}</Text>
+                      : null}
                   </View>
                   <ChevronRight size={14} color="#0EA5A4" />
                 </TouchableOpacity>
@@ -170,11 +205,15 @@ const aiCardStyles = StyleSheet.create({
 
 export default function SavedScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
   const { planWith, planPlace, tab, listingId: contextListingId } =
     useLocalSearchParams<{ planWith?: string; planPlace?: string; tab?: string; listingId?: string }>();
   const autoSendRef = useRef<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<'saved' | 'itinerary'>('saved');
+  const { show: showAlert, alertEl } = useAppAlert();
+  const [activeTab, setActiveTab] = useState<'saved' | 'itinerary' | 'experienced'>('saved');
+  const [savedRoutePlan, setSavedRoutePlan] = useState<SavedRoutePlan | null>(null);
+  const [planVisible, setPlanVisible] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
   const [removingItinerary, setRemovingItinerary] = useState<string | null>(null);
@@ -208,6 +247,18 @@ export default function SavedScreen() {
   const [savedChatsVisible, setSavedChatsVisible] = useState(false);
   const [deletingChat, setDeletingChat] = useState<string | null>(null);
 
+  // Experienced tab state
+  const [shareExpVisible, setShareExpVisible] = useState(false);
+  const [editingExperience, setEditingExperience] = useState<any>(null);
+  const [selectedExpListing, setSelectedExpListing] = useState<any>(null);
+  const [expRating, setExpRating] = useState(0);
+  const [expText, setExpText] = useState('');
+  const [expImages, setExpImages] = useState<{ uri: string; name: string }[]>([]);
+  const [expExistingImageUrls, setExpExistingImageUrls] = useState<string[]>([]);
+  const [expSubmitting, setExpSubmitting] = useState(false);
+  const [deletingExp, setDeletingExp] = useState<string | null>(null);
+  const [shareTargetExp, setShareTargetExp] = useState<ShareableExperience | null>(null);
+
   // Date picker state
   const [plannedDateObj, setPlannedDateObj] = useState<Date>(new Date());
   const [planDateObj, setPlanDateObj] = useState<Date>(new Date());
@@ -215,14 +266,54 @@ export default function SavedScreen() {
   const [showPlanDatePicker, setShowPlanDatePicker] = useState(false);
   const [planTargetListingId, setPlanTargetListingId] = useState<string | null>(null);
 
-  const { data, loading, error, refetch } = useGraphQL<{ savedListings: any[] }>(SAVED_LISTINGS_QUERY);
-  const { data: itineraryData, loading: itineraryLoading, refetch: refetchItinerary } = useGraphQL<{ myItinerary: any[] }>(MY_ITINERARY_QUERY);
+  const { data, loading, error, refetch } = useGraphQL<{ savedListings: any[] }>(SAVED_LISTINGS_QUERY, undefined, { pollInterval: 30_000 });
+  const { data: itineraryData, loading: itineraryLoading, refetch: refetchItinerary } = useGraphQL<{ myItinerary: any[] }>(MY_ITINERARY_QUERY, undefined, { pollInterval: 30_000 });
   const { data: chatsData, refetch: refetchChats } = useGraphQL<{ savedChats: any[] }>(SAVED_CHATS_QUERY);
+  const { data: expData, refetch: refetchExperiences } = useGraphQL<{ myExperiences: any[] }>(MY_EXPERIENCES_QUERY, undefined, { pollInterval: 30_000 });
 
   const savedListings = data?.savedListings ?? [];
   const itineraryItems = itineraryData?.myItinerary ?? [];
   const savedChats = chatsData?.savedChats ?? [];
+  const myExperiences = expData?.myExperiences ?? [];
   const grouped = groupByDate(itineraryItems);
+  const routeCustomDestinations = savedRoutePlan?.customDestinations ?? [];
+  const routePlanStale = savedRoutePlan
+    ? detectItineraryChanges(savedRoutePlan.itinerarySnapshot, itineraryItems).isStale
+    : false;
+
+  // Events the user attended: only show events whose actual startDateTime is in the past.
+  // For itinerary items, cross-reference savedListings to get the real event date rather
+  // than relying on the user-chosen plannedDate (which may differ from the event date).
+  const now = new Date();
+  const experiencedListingIds = new Set(myExperiences.map((e: any) => e.listingId));
+
+  // Map listingId → title for labelling experience cards
+  const listingTitleMap = new Map<string, string>();
+  itineraryItems.forEach((item: any) => { if (item.listingId && item.listingTitle) listingTitleMap.set(item.listingId, item.listingTitle); });
+  savedListings.forEach((l: any) => { if (l.id && l.title) listingTitleMap.set(l.id, l.title); });
+  const savedById = new Map(savedListings.map((l: any) => [l.id, l]));
+  const seenIds = new Set<string>();
+  const pastAttendedEvents: Array<{ id: string; title: string; placeName?: string | null; startDateTime?: string | null }> = [];
+  itineraryItems
+    .filter((item: any) => {
+      if (item.listingType !== 'EVENT') return false;
+      const saved = savedById.get(item.listingId);
+      // Prefer actual event startDateTime; fall back to plannedDate only when not saved
+      const eventDate = saved?.startDateTime ?? item.plannedDate;
+      return eventDate && new Date(eventDate) < now;
+    })
+    .forEach((item: any) => {
+      if (!seenIds.has(item.listingId) && !experiencedListingIds.has(item.listingId)) {
+        seenIds.add(item.listingId);
+        const saved = savedById.get(item.listingId);
+        pastAttendedEvents.push({
+          id: item.listingId,
+          title: item.listingTitle ?? 'Event',
+          placeName: item.listingPlaceName,
+          startDateTime: saved?.startDateTime ?? item.plannedDate,
+        });
+      }
+    });
   const savedMap: Record<string, string> = {};
   savedListings.forEach((l) => { savedMap[l.id] = l.title; });
 
@@ -251,8 +342,131 @@ export default function SavedScreen() {
 
   async function onRefresh() {
     setRefreshing(true);
-    await Promise.all([refetch(), refetchItinerary()]);
+    await Promise.all([refetch(), refetchItinerary(), refetchExperiences()]);
     setRefreshing(false);
+  }
+
+  async function loadSavedPlan() {
+    const uid = getCurrentUserUid();
+    const plan = await loadRoutePlan(uid, itineraryItems);
+    setSavedRoutePlan(plan);
+    if (plan?.plan?.trim()) {
+      void saveRoutePlan(uid, plan);
+    }
+  }
+
+  async function handleClearSavedPlan() {
+    const uid = getCurrentUserUid();
+    await clearRoutePlan(uid);
+    setSavedRoutePlan(null);
+    setPlanVisible(false);
+  }
+
+  useEffect(() => {
+    if (activeTab === 'itinerary') loadSavedPlan();
+  }, [activeTab, itineraryItems.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+
+  async function pickExpImage() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') { showAlert({ type: 'warning', title: 'Permission Required', message: 'Allow photo library access to attach photos.' }); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: false, quality: 0.8 });
+    if (result.canceled) return;
+    const asset = result.assets[0];
+    setExpImages((prev) => [...prev, { uri: asset.uri, name: `exp_${Date.now()}.jpg` }]);
+  }
+
+  function resetExperienceModal() {
+    setShareExpVisible(false);
+    setEditingExperience(null);
+    setSelectedExpListing(null);
+    setExpRating(0);
+    setExpText('');
+    setExpImages([]);
+    setExpExistingImageUrls([]);
+  }
+
+  function openNewExperienceModal() {
+    resetExperienceModal();
+    setShareExpVisible(true);
+  }
+
+  function openEditExperience(exp: any) {
+    const savedListing = savedById.get(exp.listingId);
+    setEditingExperience(exp);
+    setSelectedExpListing({
+      id: exp.listingId,
+      title: savedListing?.title ?? listingTitleMap.get(exp.listingId) ?? 'Event',
+      placeName: savedListing?.placeName ?? null,
+      startDateTime: savedListing?.startDateTime ?? null,
+    });
+    setExpRating(exp.rating);
+    setExpText(exp.text);
+    setExpExistingImageUrls(exp.imageUrls ?? []);
+    setExpImages([]);
+    setShareExpVisible(true);
+  }
+
+  async function submitExperience() {
+    if (!selectedExpListing || expRating === 0 || expText.trim().length < 10) return;
+    setExpSubmitting(true);
+    try {
+      const uploadedUrls: string[] = [];
+      for (const img of expImages) {
+        const formData = new FormData();
+        formData.append('file', { uri: img.uri, name: img.name, type: 'image/jpeg' } as any);
+        const res = await fetch(`${API_BASE}/upload`, { method: 'POST', body: formData });
+        if (res.ok) { const d = await res.json(); uploadedUrls.push(`${API_BASE}${d.url}`); }
+      }
+      const imageUrls = [...expExistingImageUrls, ...uploadedUrls];
+      if (editingExperience) {
+        await gqlFetch(UPDATE_EXPERIENCE_MUTATION, {
+          id: editingExperience.id,
+          rating: expRating,
+          text: expText.trim(),
+          imageUrls,
+        });
+        showAlert({ type: 'success', title: 'Review Updated', message: 'Your experience has been saved.' });
+        resetExperienceModal();
+      } else {
+        await gqlFetch(SHARE_EXPERIENCE_MUTATION, {
+          listingId: selectedExpListing.id,
+          rating: expRating,
+          text: expText.trim(),
+          imageUrls,
+        });
+        const postedTitle = selectedExpListing.title;
+        const postedListingId = selectedExpListing.id;
+        resetExperienceModal();
+        showAlert({ type: 'success', title: 'Experience Shared!', message: 'Your review has been posted for this event.' });
+        setShareTargetExp({
+          listingId: postedListingId,
+          rating: expRating,
+          text: expText.trim(),
+          title: postedTitle,
+        });
+      }
+      await refetchExperiences();
+    } catch (e: any) {
+      showAlert({ type: 'error', title: editingExperience ? 'Could Not Update' : 'Could Not Share', message: e.message?.includes('profan') ? 'Your review contains inappropriate language. Please revise it.' : (e.message || 'Could not save experience. Please try again.') });
+    } finally {
+      setExpSubmitting(false);
+    }
+  }
+
+  async function handleDeleteExp(id: string) {
+    setDeletingExp(id);
+    try { await gqlFetch(DELETE_EXPERIENCE_MUTATION, { id }); await refetchExperiences(); } catch {}
+    setDeletingExp(null);
+  }
+
+  function openExperienceShare(exp: any) {
+    setShareTargetExp({
+      listingId: exp.listingId,
+      rating: exp.rating,
+      text: exp.text,
+      title: listingTitleMap.get(exp.listingId) ?? null,
+    });
   }
 
   async function handleRemove(listingId: string) {
@@ -281,9 +495,9 @@ export default function SavedScreen() {
       });
       setAddModalVisible(false);
       await refetchItinerary();
-      Alert.alert('Added!', `"${addTargetListing.title}" added to your itinerary.`);
+      showAlert({ type: 'success', title: 'Added to Itinerary!', message: `"${addTargetListing.title}" has been added to your trip plan.` });
     } catch {
-      Alert.alert('Error', 'Could not add to itinerary. Please try again.');
+      showAlert({ type: 'error', title: 'Could Not Add', message: 'Could not add to itinerary. Please try again.' });
     } finally {
       setAddingToItinerary(false);
     }
@@ -331,7 +545,7 @@ export default function SavedScreen() {
   function promptAddPlanToItinerary(planText: string, msgListings?: PlanListing[]) {
     const targetId = contextListingId ?? msgListings?.[0]?.id ?? savedListings[0]?.id ?? null;
     if (!targetId) {
-      Alert.alert('No Listing', 'Save a listing or open one from the map to link this plan to your itinerary.');
+      showAlert({ type: 'warning', title: 'No Listing Found', message: 'Save a listing or open one from the map to link this plan to your itinerary.' });
       return;
     }
     setPlanTargetListingId(targetId);
@@ -355,9 +569,9 @@ export default function SavedScreen() {
       setPlanToAdd(null);
       setPlanTargetListingId(null);
       await refetchItinerary();
-      Alert.alert('✅ Added!', 'Your AI plan has been saved to the itinerary.');
+      showAlert({ type: 'success', title: 'Plan Saved!', message: 'Your AI itinerary has been added to your trip plan.' });
     } catch {
-      Alert.alert('Error', 'Could not save the plan. Please try again.');
+      showAlert({ type: 'error', title: 'Could Not Save', message: 'Could not save the plan. Please try again.' });
     } finally {
       setAddingPlan(false);
     }
@@ -381,9 +595,9 @@ export default function SavedScreen() {
       });
       setSaveChatVisible(false);
       await refetchChats();
-      Alert.alert('💾 Saved!', 'Your chat has been saved. You can resume it anytime.');
+      showAlert({ type: 'success', title: 'Chat Saved!', message: 'Your conversation has been saved. You can resume it anytime.' });
     } catch {
-      Alert.alert('Error', 'Could not save the chat. Please try again.');
+      showAlert({ type: 'error', title: 'Could Not Save', message: 'Could not save the chat. Please try again.' });
     } finally {
       setSavingChat(false);
     }
@@ -395,7 +609,7 @@ export default function SavedScreen() {
       setChatMessages(msgs);
       setSavedChatsVisible(false);
     } catch {
-      Alert.alert('Error', 'Could not load this chat.');
+      showAlert({ type: 'error', title: 'Could Not Load', message: 'Could not load this chat. Please try again.' });
     }
   }
 
@@ -409,13 +623,17 @@ export default function SavedScreen() {
   }
 
   if (loading && !data) {
-    return <View style={styles.centered}><ActivityIndicator size="large" color="#0EA5A4" /></View>;
+    return (
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
   }
 
   if (error) {
     return (
-      <View style={styles.centered}>
-        <Text style={styles.errorText}>Failed to load saved listings.</Text>
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <Text style={[styles.errorText, { color: colors.text }]}>Failed to load saved listings.</Text>
         <TouchableOpacity onPress={() => refetch()} style={styles.retryButton}>
           <Text style={styles.retryButtonText}>Try Again</Text>
         </TouchableOpacity>
@@ -424,12 +642,18 @@ export default function SavedScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Your Trips</Text>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {alertEl}
+      <ExperienceShareModal
+        visible={!!shareTargetExp}
+        experience={shareTargetExp}
+        onClose={() => setShareTargetExp(null)}
+      />
+      <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Your Trips</Text>
       </View>
 
-      <View style={styles.tabContainer}>
+      <View style={[styles.tabContainer, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => setActiveTab('saved')} style={[styles.tab, activeTab === 'saved' && styles.activeTab]}>
           <View style={styles.tabContent}>
             <Bookmark size={16} color={activeTab === 'saved' ? '#0EA5A4' : '#667085'} />
@@ -442,9 +666,15 @@ export default function SavedScreen() {
             <Text style={[styles.tabText, activeTab === 'itinerary' && styles.activeTabText]}>Itinerary</Text>
           </View>
         </TouchableOpacity>
+        <TouchableOpacity onPress={() => setActiveTab('experienced')} style={[styles.tab, activeTab === 'experienced' && styles.activeTab]}>
+          <View style={styles.tabContent}>
+            <Star size={16} color={activeTab === 'experienced' ? '#0EA5A4' : '#667085'} />
+            <Text style={[styles.tabText, activeTab === 'experienced' && styles.activeTabText]}>Experienced</Text>
+          </View>
+        </TouchableOpacity>
       </View>
 
-      {activeTab === 'itinerary' ? (
+      {activeTab === 'itinerary' && (
         <ScrollView style={styles.content} contentContainerStyle={styles.listContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5A4" />}
           showsVerticalScrollIndicator={false}
@@ -459,6 +689,78 @@ export default function SavedScreen() {
             <Text style={aiBannerStyles.arrow}>›</Text>
           </TouchableOpacity>
 
+          {/* Saved Route Plan — compact header bar */}
+          {/* Route plan banner */}
+          {savedRoutePlan && (
+            <View style={{
+              backgroundColor: '#FFFFFF', borderRadius: 16, marginBottom: 16,
+              borderWidth: 1, borderColor: '#D1FAE5',
+              shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.07, shadowRadius: 8, elevation: 4,
+            }}>
+              {/* Teal accent stripe */}
+              <View style={{
+                height: 4, backgroundColor: '#0EA5A4',
+                borderTopLeftRadius: 15, borderTopRightRadius: 15,
+              }} />
+              {/* Header row */}
+              <View style={{
+                flexDirection: 'row', alignItems: 'center',
+                justifyContent: 'space-between',
+                paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8,
+              }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={{ fontSize: 17 }}>🗺️</Text>
+                  <Text style={{ fontSize: 14, fontWeight: '800', color: '#0B1220' }}>AI Route Plan</Text>
+                  {routePlanStale && (
+                    <View style={styles.routePlanStaleBadge}>
+                      <Text style={styles.routePlanStaleBadgeText}>Outdated</Text>
+                    </View>
+                  )}
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <TouchableOpacity
+                    onPress={() => router.push('/(tabs)/map' as any)}
+                    style={{
+                      width: 32, height: 32, borderRadius: 16,
+                      backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center',
+                    }}
+                  >
+                    <MapPin size={14} color="#0EA5A4" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleClearSavedPlan}
+                    style={{
+                      width: 32, height: 32, borderRadius: 16,
+                      backgroundColor: '#FEF2F2', alignItems: 'center', justifyContent: 'center',
+                    }}
+                  >
+                    <Trash2 size={14} color="#EF4444" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+              {/* Summary */}
+              <Text style={{ fontSize: 12, color: '#6B7280', lineHeight: 18, paddingHorizontal: 14, paddingBottom: 12 }}>
+                {savedRoutePlan.summary}
+              </Text>
+              {/* Toggle button */}
+              <TouchableOpacity
+                onPress={() => setPlanVisible(v => !v)}
+                activeOpacity={0.75}
+                style={{
+                  flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                  backgroundColor: '#F0FDF9', paddingVertical: 11,
+                  borderTopWidth: 1, borderTopColor: '#D1FAE5',
+                  borderBottomLeftRadius: 15, borderBottomRightRadius: 15,
+                }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#0EA5A4' }}>
+                  {planVisible ? '▲  Hide route plan' : '▼  Show route plan'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {itineraryLoading && !itineraryData ? (
             <View style={[styles.centered, { marginTop: 40 }]}><ActivityIndicator size="large" color="#0EA5A4" /></View>
           ) : itineraryItems.length === 0 ? (
@@ -468,12 +770,67 @@ export default function SavedScreen() {
               <Text style={styles.emptySubtitle}>Tap the + on any saved listing, or use the AI Planner above</Text>
             </View>
           ) : (
-            grouped.map(([date, items]) => (
-              <View key={date} style={styles.daySection}>
-                <View style={styles.dayHeader}><Text style={styles.dayDate}>{date}</Text></View>
-                {items.map((item) => {
+            grouped.map(({ isoDate, label, items }) => {
+              const dayEntries = buildItineraryDayEntries(isoDate, items, routeCustomDestinations);
+              return (
+              <View key={isoDate} style={styles.daySection}>
+                <View style={styles.dayHeader}><Text style={styles.dayDate}>{label}</Text></View>
+                {dayEntries.map((entry) => {
+                  if (entry.kind === 'custom') {
+                    const { custom } = entry;
+                    const routePlanItem =
+                      savedRoutePlan && planVisible
+                        ? getMappingForCustom(savedRoutePlan.mappings, custom.id)
+                        : null;
+                    return (
+                      <View key={`custom-${custom.id}`} style={styles.destinationEntry}>
+                        <View style={styles.destinationBanner}>
+                          <View style={styles.destinationIcon}>
+                            <MapPin size={24} color="#F59E0B" />
+                          </View>
+                          <View style={styles.destinationContent}>
+                            <View style={styles.destinationKindBadge}>
+                              <Text style={styles.destinationKindBadgeText}>DESTINATION</Text>
+                            </View>
+                            <Text style={styles.destinationTitle} numberOfLines={2}>{custom.title}</Text>
+                            {custom.placeName ? (
+                              <Text style={styles.destinationMeta} numberOfLines={2}>📍 {custom.placeName}</Text>
+                            ) : null}
+                          </View>
+                        </View>
+                        {routePlanItem ? (
+                          <View style={styles.routeSnippetBelowBanner}>
+                            <View style={styles.routeSnippetPill}>
+                              <Text style={styles.routeSnippetPillText}>{routePlanItem.header}</Text>
+                            </View>
+                            {routePlanItem.segments.map((segment, segmentIndex) => (
+                              <View
+                                key={`${custom.id}-route-${segmentIndex}`}
+                                style={segmentIndex > 0 ? styles.routeSnippetSegment : undefined}
+                              >
+                                <Text
+                                  style={[
+                                    styles.routeSnippetText,
+                                    segment.isTravel && styles.routeSnippetTravelText,
+                                  ]}
+                                >
+                                  {segment.bullet}
+                                </Text>
+                              </View>
+                            ))}
+                          </View>
+                        ) : null}
+                      </View>
+                    );
+                  }
+
+                  const item = entry.item;
                   const title = item.listingTitle ?? savedMap[item.listingId] ?? 'Unknown listing';
                   const imageUrl = item.listingImageUrl ? fixImageUrl(item.listingImageUrl) : null;
+                  const routePlanItem =
+                    savedRoutePlan && planVisible
+                      ? getMappingForItem(savedRoutePlan.mappings, item.id)
+                      : null;
                   return (
                     <View key={item.id} style={styles.itineraryItem}>
                       <TouchableOpacity
@@ -490,6 +847,28 @@ export default function SavedScreen() {
                           {item.listingPlaceName ? <Text style={styles.itineraryMeta} numberOfLines={1}>📍 {item.listingPlaceName}</Text> : null}
                           {item.listingType ? <Text style={styles.itineraryType}>{item.listingType}</Text> : null}
                           {item.note ? <Text style={styles.itineraryNote} numberOfLines={2}>{item.note}</Text> : null}
+                          {routePlanItem ? (
+                            <View style={styles.routeSnippet}>
+                              <View style={styles.routeSnippetPill}>
+                                <Text style={styles.routeSnippetPillText}>{routePlanItem.header}</Text>
+                              </View>
+                              {routePlanItem.segments.map((segment, segmentIndex) => (
+                                <View
+                                  key={`${item.id}-route-${segmentIndex}`}
+                                  style={segmentIndex > 0 ? styles.routeSnippetSegment : undefined}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.routeSnippetText,
+                                      segment.isTravel && styles.routeSnippetTravelText,
+                                    ]}
+                                  >
+                                    {segment.bullet}
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
+                          ) : null}
                         </View>
                       </TouchableOpacity>
                       <TouchableOpacity onPress={() => handleRemoveFromItinerary(item.id)} disabled={removingItinerary === item.id} style={styles.removeItineraryBtn}>
@@ -499,11 +878,14 @@ export default function SavedScreen() {
                   );
                 })}
               </View>
-            ))
+              );
+            })
           )}
           <View style={{ height: 40 }} />
         </ScrollView>
-      ) : (
+      )}
+
+      {activeTab === 'saved' && (
         <ScrollView style={styles.content}
           contentContainerStyle={savedListings.length === 0 ? styles.emptyContent : styles.listContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5A4" />}
@@ -516,7 +898,9 @@ export default function SavedScreen() {
               <Text style={styles.emptySubtitle}>Tap the heart icon on any listing to save it here</Text>
             </View>
           ) : (
-            savedListings.map((listing: any) => {
+            savedListings.filter((listing: any) =>
+              !(listing.type === 'EVENT' && listing.startDateTime && new Date(listing.startDateTime) < now)
+            ).map((listing: any) => {
               const imageUrl = fixImageUrl(listing.imageUrl);
               const isRemoving = removing === listing.id;
               return (
@@ -550,8 +934,8 @@ export default function SavedScreen() {
                       {listing.category
                         ? <View style={styles.categoryTag}><Text style={styles.categoryTagText}>{listing.category}</Text></View>
                         : <View />}
-                      {listing.price
-                        ? <Text style={styles.listingPrice}>LKR {listing.price}</Text>
+                      {listingHasPrice(listing)
+                        ? <Text style={styles.listingPrice}>{formatListingPriceSummary(listing)}</Text>
                         : <Text style={styles.listingPriceFree}>Free</Text>}
                     </View>
                   </View>
@@ -562,6 +946,183 @@ export default function SavedScreen() {
           <View style={{ height: 40 }} />
         </ScrollView>
       )}
+
+      {activeTab === 'experienced' && (
+        <ScrollView style={styles.content} contentContainerStyle={styles.listContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5A4" />}
+          showsVerticalScrollIndicator={false}
+        >
+          <TouchableOpacity style={expTabStyles.addBtn} onPress={openNewExperienceModal}>
+            <Plus size={18} color="#fff" />
+            <Text style={expTabStyles.addBtnText}>Share an Experience</Text>
+          </TouchableOpacity>
+
+          {myExperiences.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Star size={64} color="#E5E7EB" />
+              <Text style={styles.emptyTitle}>No experiences yet</Text>
+              <Text style={styles.emptySubtitle}>Attend an event and share your story with the community</Text>
+            </View>
+          ) : myExperiences.map((exp: any) => {
+            const eventTitle = listingTitleMap.get(exp.listingId);
+            return (
+              <View key={exp.id} style={expTabStyles.card}>
+                {eventTitle ? (
+                  <TouchableOpacity onPress={() => router.push(`/listing/${exp.listingId}` as any)} activeOpacity={0.75}>
+                    <Text style={expTabStyles.eventTitle} numberOfLines={1}>{eventTitle}</Text>
+                  </TouchableOpacity>
+                ) : null}
+                <View style={expTabStyles.cardHeader}>
+                  <View>
+                    <View style={{ flexDirection: 'row', gap: 3, marginBottom: 4 }}>
+                      {[1, 2, 3, 4, 5].map((s) => (
+                        <Star key={s} size={14} color={s <= exp.rating ? '#F59E0B' : '#D1D5DB'} fill={s <= exp.rating ? '#F59E0B' : 'none'} />
+                      ))}
+                    </View>
+                    <Text style={expTabStyles.date}>
+                      {new Date(exp.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </Text>
+                  </View>
+                  <View style={expTabStyles.cardActions}>
+                    <TouchableOpacity onPress={() => openEditExperience(exp)} style={expTabStyles.iconBtn}>
+                      <Pencil size={16} color="#0EA5A4" />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => handleDeleteExp(exp.id)} disabled={deletingExp === exp.id} style={expTabStyles.iconBtn}>
+                      {deletingExp === exp.id
+                        ? <ActivityIndicator size="small" color="#EF4444" />
+                        : <Trash2 size={16} color="#EF4444" />}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                <Text style={expTabStyles.text}>{exp.text}</Text>
+                {(exp.imageUrls ?? []).length > 0 && (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
+                    {exp.imageUrls.map((url: string, i: number) => (
+                      <Image key={i} source={{ uri: fixImageUrl(url) ?? url }} style={expTabStyles.photo} />
+                    ))}
+                  </ScrollView>
+                )}
+                <TouchableOpacity style={expTabStyles.shareBtn} onPress={() => openExperienceShare(exp)}>
+                  <Share2 size={14} color="#0EA5A4" />
+                  <Text style={expTabStyles.shareBtnText}>Share on Social Media</Text>
+                </TouchableOpacity>
+              </View>
+            );
+          })}
+          <View style={{ height: 40 }} />
+        </ScrollView>
+      )}
+
+      {/* Share Experience modal */}
+      <Modal visible={shareExpVisible} animationType="slide" transparent onRequestClose={resetExperienceModal}>
+        <View style={modalStyles.overlay}>
+          <ScrollView style={[modalStyles.sheet, { maxHeight: '92%' }]} contentContainerStyle={{ paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
+            <View style={modalStyles.headerRow}>
+              <Text style={modalStyles.title}>{editingExperience ? 'Edit Your Experience' : 'Share Your Experience'}</Text>
+              <TouchableOpacity onPress={resetExperienceModal}><X size={22} color="#667085" /></TouchableOpacity>
+            </View>
+
+            {/* Event selection */}
+            {selectedExpListing ? (
+              <View style={expTabStyles.selectedListing}>
+                <View style={{ flex: 1 }}>
+                  <Text style={expTabStyles.selectedListingTitle}>{selectedExpListing.title}</Text>
+                  {selectedExpListing.placeName ? <Text style={expTabStyles.selectedListingMeta}>📍 {selectedExpListing.placeName}</Text> : null}
+                </View>
+                {!editingExperience ? (
+                  <TouchableOpacity onPress={() => setSelectedExpListing(null)}>
+                    <X size={16} color="#667085" />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            ) : !editingExperience ? (
+              <>
+                <Text style={modalStyles.label}>Events you attended</Text>
+                {pastAttendedEvents.length > 0 ? (
+                  pastAttendedEvents.map((ev) => (
+                    <TouchableOpacity key={ev.id} style={expTabStyles.searchResult} onPress={() => setSelectedExpListing(ev)}>
+                      <Text style={expTabStyles.searchResultText}>{ev.title}</Text>
+                      {ev.placeName ? <Text style={expTabStyles.searchResultMeta}>📍 {ev.placeName}</Text> : null}
+                      {ev.startDateTime ? (
+                        <Text style={expTabStyles.searchResultMeta}>
+                          {new Date(ev.startDateTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </Text>
+                      ) : null}
+                    </TouchableOpacity>
+                  ))
+                ) : (
+                  <Text style={expTabStyles.noSuggestionsText}>
+                    You can only share experiences for events you attended. Mark an event as "Going" or add it to your itinerary before it happens.
+                  </Text>
+                )}
+              </>
+            ) : null}
+
+            {/* Star rating */}
+            <Text style={modalStyles.label}>Rating</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 4 }}>
+              {[1, 2, 3, 4, 5].map((s) => (
+                <TouchableOpacity key={s} onPress={() => setExpRating(s)}>
+                  <Star size={32} color={s <= expRating ? '#F59E0B' : '#D1D5DB'} fill={s <= expRating ? '#F59E0B' : 'none'} />
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Text */}
+            <Text style={modalStyles.label}>Your Experience</Text>
+            <TextInput
+              style={[modalStyles.input, { height: 100, textAlignVertical: 'top' }]}
+              placeholder="Describe your experience (min 10 characters)…"
+              placeholderTextColor="#9CA3AF"
+              value={expText}
+              onChangeText={setExpText}
+              multiline
+            />
+
+            {/* Photos */}
+            <Text style={modalStyles.label}>Add Photos (optional)</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+              {expExistingImageUrls.map((url, i) => (
+                <View key={`${url}-${i}`} style={{ position: 'relative' }}>
+                  <Image source={{ uri: fixImageUrl(url) ?? url }} style={expTabStyles.thumb} />
+                  <TouchableOpacity
+                    style={expTabStyles.thumbRemove}
+                    onPress={() => setExpExistingImageUrls((prev) => prev.filter((_, idx) => idx !== i))}
+                  >
+                    <X size={10} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+              {expImages.map((img, i) => (
+                <View key={i} style={{ position: 'relative' }}>
+                  <Image source={{ uri: img.uri }} style={expTabStyles.thumb} />
+                  <TouchableOpacity
+                    style={expTabStyles.thumbRemove}
+                    onPress={() => setExpImages((prev) => prev.filter((_, idx) => idx !== i))}
+                  >
+                    <X size={10} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+              {expExistingImageUrls.length + expImages.length < 4 && (
+                <TouchableOpacity style={expTabStyles.addPhotoBtn} onPress={pickExpImage}>
+                  <Plus size={20} color="#9CA3AF" />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <TouchableOpacity
+              style={[modalStyles.submitBtn, (!selectedExpListing || expRating === 0 || expText.trim().length < 10 || expSubmitting) && { opacity: 0.5 }]}
+              onPress={submitExperience}
+              disabled={!selectedExpListing || expRating === 0 || expText.trim().length < 10 || expSubmitting}
+            >
+              <Text style={modalStyles.submitText}>
+                {expSubmitting ? 'Saving…' : editingExperience ? 'Save Changes' : '⭐ Share Experience'}
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </Modal>
 
       {/* Add to itinerary modal (from saved card) */}
       <Modal visible={addModalVisible} animationType="slide" transparent onRequestClose={() => setAddModalVisible(false)}>
@@ -821,6 +1382,83 @@ const styles = StyleSheet.create({
   itineraryMeta: { fontSize: 11, color: '#667085', marginBottom: 2 },
   itineraryType: { fontSize: 10, color: '#0EA5A4', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: 2 },
   itineraryNote: { fontSize: 11, color: '#9CA3AF', fontStyle: 'italic' },
+  destinationEntry: { marginBottom: 12 },
+  destinationBanner: {
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  destinationIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    backgroundColor: '#FFFBEB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  destinationContent: { flex: 1, marginLeft: 12, position: 'relative', minHeight: 56 },
+  destinationKindBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: 'rgba(245,158,11,0.18)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  destinationKindBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+    color: '#B45309',
+  },
+  destinationTitle: { fontSize: 14, fontWeight: 'bold', color: '#0B1220', marginBottom: 2, paddingRight: 88 },
+  destinationMeta: { fontSize: 11, color: '#667085' },
+  routeSnippetBelowBanner: {
+    marginTop: 8,
+    backgroundColor: '#FFFBEB',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  routeSnippet: {
+    marginTop: 8,
+    backgroundColor: '#F8FFFE',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+  },
+  routeSnippetPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#0EA5A4',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginBottom: 6,
+  },
+  routeSnippetPillText: { fontSize: 10, fontWeight: '800', color: '#FFFFFF' },
+  routeSnippetSegment: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#E6FFFA',
+  },
+  routeSnippetText: { fontSize: 12, color: '#0F172A', lineHeight: 18 },
+  routeSnippetTravelText: { fontSize: 11, color: '#667085', fontStyle: 'italic' },
   removeItineraryBtn: { padding: 8 },
   content: { flex: 1 },
   emptyContent: { flexGrow: 1 },
@@ -850,6 +1488,15 @@ const styles = StyleSheet.create({
   categoryTagText: { fontSize: 11, color: '#166534', fontWeight: '600', textTransform: 'capitalize' },
   listingPrice: { fontSize: 14, fontWeight: 'bold', color: '#0EA5A4' },
   listingPriceFree: { fontSize: 13, fontWeight: '600', color: '#10B981' },
+  routePlanStaleBadge: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  routePlanStaleBadgeText: { fontSize: 10, fontWeight: '800', color: '#B45309' },
 });
 
 const aiBannerStyles = StyleSheet.create({
@@ -916,6 +1563,137 @@ const modalStyles = StyleSheet.create({
   input: { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: '#0B1220' },
   submitBtn: { backgroundColor: '#0EA5A4', borderRadius: 999, paddingVertical: 14, alignItems: 'center', marginTop: 20 },
   submitText: { color: '#FFF', fontWeight: 'bold', fontSize: 15 },
+});
+
+const expTabStyles = StyleSheet.create({
+  addBtn: {
+    backgroundColor: '#0EA5A4', flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, paddingVertical: 14, borderRadius: 999, marginBottom: 20,
+  },
+  addBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
+  card: {
+    backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 14,
+    borderWidth: 1, borderColor: '#E5E7EB',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
+  },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
+  cardActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  iconBtn: { padding: 6 },
+  date: { fontSize: 11, color: '#9CA3AF' },
+  text: { fontSize: 13, color: '#374151', lineHeight: 19, marginBottom: 4 },
+  photo: { width: 80, height: 80, borderRadius: 10, marginRight: 8 },
+  shareBtn: {
+    marginTop: 10, borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 999,
+    paddingVertical: 8, paddingHorizontal: 12,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+  },
+  shareBtnText: { fontSize: 12, color: '#374151', fontWeight: '600' },
+  selectedListing: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#E0F6F6', borderRadius: 10, padding: 12, marginBottom: 4,
+  },
+  selectedListingTitle: { fontSize: 14, fontWeight: '700', color: '#0B1220' },
+  selectedListingMeta: { fontSize: 12, color: '#667085', marginTop: 2 },
+  searchResult: {
+    borderBottomWidth: 1, borderBottomColor: '#F1F5F9', paddingVertical: 10,
+  },
+  searchResultText: { fontSize: 14, fontWeight: '600', color: '#0B1220' },
+  searchResultMeta: { fontSize: 12, color: '#667085', marginTop: 2 },
+  thumb: { width: 72, height: 72, borderRadius: 10 },
+  thumbRemove: {
+    position: 'absolute', top: -6, right: -6,
+    backgroundColor: '#EF4444', borderRadius: 999, width: 18, height: 18,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  addPhotoBtn: {
+    width: 72, height: 72, borderRadius: 10,
+    borderWidth: 1, borderColor: '#E5E7EB', borderStyle: 'dashed',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  noSuggestionsText: { fontSize: 13, color: '#9CA3AF', marginTop: 4, marginBottom: 8, lineHeight: 19 },
+  eventTitle: { fontSize: 15, fontWeight: '700', color: '#0B1220', marginBottom: 10, textDecorationLine: 'underline' },
+
+  // Route plan banner
+  rpBanner: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  rpBannerAccent: {
+    height: 4,
+    backgroundColor: '#0EA5A4',
+    borderTopLeftRadius: 15,
+    borderTopRightRadius: 15,
+  },
+  rpBannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  rpBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  rpBannerTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0B1220',
+  },
+  rpBannerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  rpBannerBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rpBannerSummary: {
+    fontSize: 12,
+    color: '#6B7280',
+    lineHeight: 18,
+    paddingHorizontal: 14,
+    paddingBottom: 12,
+  },
+  rpBannerToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F0FDF9',
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#D1FAE5',
+    borderBottomLeftRadius: 15,
+    borderBottomRightRadius: 15,
+  },
+  rpBannerToggleText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0EA5A4',
+  },
+  routePlanClearBtn: { padding: 4 },
+  // Inline day plan block (below each day's itinerary items)
+  inlinePlanBlock: {
+    backgroundColor: '#F8FFFE', borderRadius: 12, padding: 12,
+    marginTop: 6, marginBottom: 4,
+    borderLeftWidth: 3, borderLeftColor: '#0EA5A4',
+    borderWidth: 1, borderColor: '#E0F6F6',
+  },
 });
 
 const savedChatItemStyles = StyleSheet.create({

@@ -6,6 +6,8 @@ import {
 import { Search as SearchIcon, X, History, TrendingUp, MapPin, CalendarDays } from 'lucide-react-native';
 import { gqlFetch } from '../../src/hooks/useGraphQL';
 import { useRouter } from 'expo-router';
+import { useTheme } from '../../src/context/ThemeContext';
+import { formatListingPriceSummary, listingHasPrice } from '../../src/lib/listingPrice';
 
 const API_BASE = (process.env.EXPO_PUBLIC_API_URL ?? 'http://10.0.2.2:3000/graphql').replace('/graphql', '');
 
@@ -16,8 +18,8 @@ function fixImageUrl(url?: string | null): string | null {
 
 const SEARCH_QUERY = `
   query SearchListings($q: String, $limit: Int, $category: String, $startAfter: String, $startBefore: String) {
-    searchListings(q: $q, limit: $limit, category: $category, startAfter: $startAfter, startBefore: $startBefore) {
-      listings { id title description type category price placeName imageUrl createdAt startDateTime goingCount }
+    searchListings(q: $q, limit: $limit, category: $category, startAfter: $startAfter, startBefore: $startBefore, hidePastEvents: true) {
+      listings { id title description type category price priceTiers { label price description } placeName imageUrl createdAt startDateTime goingCount }
       total
     }
   }
@@ -45,6 +47,7 @@ const POPULAR_SEARCHES = ['Colombo', 'Kandy', 'Galle', 'Nuwara Eliya', 'Trincoma
 
 export default function SearchScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [datePreset, setDatePreset] = useState('');
@@ -101,15 +104,15 @@ export default function SearchScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Search bar */}
-      <View style={styles.header}>
-        <View style={styles.searchInputContainer}>
-          <SearchIcon size={20} color="#667085" />
+      <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+        <View style={[styles.searchInputContainer, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}>
+          <SearchIcon size={20} color={colors.textMuted} />
           <TextInput
             placeholder="Where to next?"
-            style={styles.input}
-            placeholderTextColor="#667085"
+            style={[styles.input, { color: colors.text }]}
+            placeholderTextColor={colors.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
@@ -122,12 +125,16 @@ export default function SearchScreen() {
       </View>
 
       {/* Filter chips */}
-      <View style={filterStyles.row}>
+      <View style={[filterStyles.row, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={filterStyles.scroll}>
           {(['week', 'month'] as const).map((p) => (
             <TouchableOpacity
               key={p}
-              style={[filterStyles.chip, datePreset === p && filterStyles.chipActive]}
+              style={[
+                filterStyles.chip,
+                { backgroundColor: colors.inputBackground, borderColor: colors.border },
+                datePreset === p && filterStyles.chipActive,
+              ]}
               onPress={() => setDatePreset(datePreset === p ? '' : p)}
             >
               <Text style={[filterStyles.chipText, datePreset === p && filterStyles.chipTextActive]}>
@@ -138,7 +145,11 @@ export default function SearchScreen() {
           {CATEGORIES.map((cat) => (
             <TouchableOpacity
               key={cat}
-              style={[filterStyles.chip, selectedCategory === cat && filterStyles.chipActive]}
+              style={[
+                filterStyles.chip,
+                { backgroundColor: colors.inputBackground, borderColor: colors.border },
+                selectedCategory === cat && filterStyles.chipActive,
+              ]}
               onPress={() => setSelectedCategory(selectedCategory === cat ? '' : cat)}
             >
               <Text style={[filterStyles.chipText, selectedCategory === cat && filterStyles.chipTextActive]}>
@@ -155,13 +166,13 @@ export default function SearchScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <History size={18} color="#667085" />
-              <Text style={styles.sectionTitle}>Recent Searches</Text>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Searches</Text>
             </View>
             <View style={styles.chipContainer}>
               {RECENT_SEARCHES.map((item, idx) => (
-                <TouchableOpacity key={idx} style={styles.chip} onPress={() => setSearchQuery(item)}>
-                  <History size={14} color="#667085" style={{ marginRight: 6 }} />
-                  <Text style={styles.chipText}>{item}</Text>
+                <TouchableOpacity key={idx} style={[styles.chip, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={() => setSearchQuery(item)}>
+                  <History size={14} color={colors.textMuted} style={{ marginRight: 6 }} />
+                  <Text style={[styles.chipText, { color: colors.text }]}>{item}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -170,7 +181,7 @@ export default function SearchScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <TrendingUp size={18} color="#0EA5A4" />
-              <Text style={styles.sectionTitle}>Popular Destinations</Text>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Popular Destinations</Text>
             </View>
             <View style={styles.chipContainer}>
               {POPULAR_SEARCHES.map((item, idx) => (
@@ -203,7 +214,7 @@ export default function SearchScreen() {
             return (
               <TouchableOpacity
                 key={listing.id}
-                style={styles.resultCard}
+                style={[styles.resultCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
                 onPress={() => router.push(`/listing/${listing.id}`)}
                 activeOpacity={0.8}
               >
@@ -247,8 +258,8 @@ export default function SearchScreen() {
                         {listing.category.charAt(0) + listing.category.slice(1).toLowerCase()}
                       </Text>
                     )}
-                    {listing.price
-                      ? <Text style={styles.resultPrice}>LKR {listing.price}</Text>
+                    {listingHasPrice(listing)
+                      ? <Text style={styles.resultPrice}>{formatListingPriceSummary(listing)}</Text>
                       : <Text style={styles.resultPriceFree}>Free</Text>
                     }
                   </View>

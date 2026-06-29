@@ -1,6 +1,5 @@
 import { initializeApp, getApp, getApps } from 'firebase/app';
-import { getAuth, initializeAuth, getReactNativePersistence } from 'firebase/auth';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getAuth, type Auth } from 'firebase/auth';
 
 const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
@@ -13,13 +12,9 @@ const firebaseConfig = {
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-let auth;
-try {
-  auth = initializeAuth(app, {
-    persistence: getReactNativePersistence(AsyncStorage),
-  });
-} catch {
-  auth = getAuth(app);
-}
+export const auth: Auth = getAuth(app);
+export { app as firebaseApp };
 
-export { app as firebaseApp, auth };
+export function getCurrentUserUid(fallback = 'guest'): string {
+  return auth.currentUser?.uid ?? fallback;
+}

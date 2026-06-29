@@ -20,6 +20,18 @@ import { useFeatureFlags } from "../../auth/useFeatureFlags";
 type ListingType = "EVENT" | "RENTAL" | "ACCOMMODATION" | "ACTIVITY";
 type ListingCategory = "NATURE" | "CULTURE" | "ADVENTURE" | "FOOD" | "WELLNESS" | "BEACH" | "HERITAGE";
 
+type PriceTierForm = {
+  label: string;
+  price: string;
+  description: string;
+};
+
+const DEFAULT_PRICE_TIERS: PriceTierForm[] = [
+  { label: "Bronze", price: "", description: "" },
+  { label: "Silver", price: "", description: "" },
+  { label: "Gold", price: "", description: "" },
+];
+
 export function EditListing() {
   const { id } = useParams<{ id: string }>();
   const { isEnabledFor } = useFeatureFlags();
@@ -57,6 +69,8 @@ export function EditListing() {
   // Optional fields
   const [category, setCategory] = useState<ListingCategory | "">("");
   const [price, setPrice] = useState("");
+  const [tieredPricing, setTieredPricing] = useState(false);
+  const [priceTiers, setPriceTiers] = useState<PriceTierForm[]>(DEFAULT_PRICE_TIERS);
   const [startDateTime, setStartDateTime] = useState("");
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
@@ -109,6 +123,18 @@ export function EditListing() {
     }
   }
 
+  function updateTier(index: number, field: keyof PriceTierForm, value: string) {
+    setPriceTiers((prev) => prev.map((tier, i) => (i === index ? { ...tier, [field]: value } : tier)));
+  }
+
+  function addTier() {
+    setPriceTiers((prev) => [...prev, { label: "", price: "", description: "" }]);
+  }
+
+  function removeTier(index: number) {
+    setPriceTiers((prev) => prev.filter((_, i) => i !== index));
+  }
+
   // Prepopulate state
   useEffect(() => {
     if (initialData?.listing) {
@@ -119,11 +145,27 @@ export function EditListing() {
       setPlaceName(l.placeName || "");
       setMapLink(l.mapLink || "");
       setCategory((l.category as ListingCategory) || "");
-      setPrice(l.price ? String(l.price) : "");
       setImagePreview(l.imageUrl || null);
       setLat(l.lat && l.lat !== 0 ? l.lat : null);
       setLng(l.lng && l.lng !== 0 ? l.lng : null);
       setIsPremium(l.isPremium ?? false);
+
+      const existingTiers = l.priceTiers ?? [];
+      if (existingTiers.length > 0) {
+        setTieredPricing(true);
+        setPrice("");
+        setPriceTiers(
+          existingTiers.map((tier: { label: string; price: number; description?: string | null }) => ({
+            label: tier.label ?? "",
+            price: tier.price != null ? String(tier.price) : "",
+            description: tier.description ?? "",
+          })),
+        );
+      } else {
+        setTieredPricing(false);
+        setPriceTiers(DEFAULT_PRICE_TIERS);
+        setPrice(l.price ? String(l.price) : "");
+      }
 
       // format datetime for input
       if (l.startDateTime) {
@@ -142,6 +184,19 @@ export function EditListing() {
     e.preventDefault();
     setErr(null);
     setSuccess(false);
+
+    const tiersForSubmit = priceTiers
+      .filter((t) => t.label.trim() && t.price)
+      .map((t) => ({
+        label: t.label.trim(),
+        price: Number(t.price),
+        description: t.description.trim() || undefined,
+      }));
+
+    if (tieredPricing && tiersForSubmit.length === 0) {
+      setErr("Add at least one price tier with a tier name and price.");
+      return;
+    }
 
     try {
       let finalImageUrl = initialData?.listing?.imageUrl || null;
@@ -178,7 +233,12 @@ export function EditListing() {
             ...(mapLink ? { mapLink: mapLink.trim() } : {}),
             ...(finalImageUrl ? { imageUrl: finalImageUrl } : {}),
             ...(category ? { category } : {}),
-            ...(price ? { price: Number(price) } : {}),
+            ...(tieredPricing
+              ? { priceTiers: tiersForSubmit }
+              : {
+                  priceTiers: [],
+                  ...(price ? { price: Number(price) } : { price: null }),
+                }),
             ...(startDateTime ? { startDateTime } : {}),
             ...(lat !== null ? { lat } : {}),
             ...(lng !== null ? { lng } : {}),
@@ -348,28 +408,116 @@ export function EditListing() {
             </div>
           </Card>
 
-          {/* Pricing & Date */}
+          {/* Pricing & Schedule */}
           <Card className="mb-6">
              <h6 className="text-slate-400 text-sm mb-6 font-bold uppercase">Pricing & Schedule</h6>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Input
-                label="Price (LKR)"
-                hint="Leave blank if free"
-                value={price}
-                onChange={(e) => setPrice(e.target.value.replace(/[^0-9.]/g, ""))}
-                placeholder="e.g. 2500"
-              />
-              <label className="block">
-                <div className="mb-2 uppercase text-slate-600 text-xs font-bold">
-                  Start Date & Time <span className="text-slate-400 normal-case">(optional)</span>
-                </div>
+            <div className="space-y-4">
+              <label className="flex items-center gap-3 cursor-pointer group">
                 <input
-                  type="datetime-local"
-                  className="border-0 px-3 py-3 text-slate-600 bg-white rounded text-sm shadow focus:outline-none focus:ring w-full ease-linear transition-all duration-150"
-                  value={startDateTime}
-                  onChange={(e) => setStartDateTime(e.target.value)}
+                  type="checkbox"
+                  checked={tieredPricing}
+                  onChange={(e) => setTieredPricing(e.target.checked)}
+                  className="w-4 h-4 accent-sky-600"
                 />
+                <span className="text-xs font-bold uppercase text-slate-600 group-hover:text-slate-800">
+                  Tiered Pricing{" "}
+                  <span className="text-slate-400 normal-case font-normal">(multiple price ranges, e.g. Bronze / Silver / Gold)</span>
+                </span>
               </label>
+
+              {!tieredPricing ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Input
+                    label="Price (LKR)"
+                    hint="Leave blank if free"
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value.replace(/[^0-9.]/g, ""))}
+                    placeholder="e.g. 2500"
+                  />
+                  <label className="block">
+                    <div className="mb-2 uppercase text-slate-600 text-xs font-bold">
+                      Start Date & Time <span className="text-slate-400 normal-case">(optional)</span>
+                    </div>
+                    <input
+                      type="datetime-local"
+                      className="border-0 px-3 py-3 text-slate-600 bg-white rounded text-sm shadow focus:outline-none focus:ring w-full ease-linear transition-all duration-150"
+                      value={startDateTime}
+                      onChange={(e) => setStartDateTime(e.target.value)}
+                    />
+                  </label>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {priceTiers.map((tier, i) => (
+                    <div key={i} className="flex gap-2 items-start bg-slate-50 rounded-lg p-3 shadow-sm">
+                      <div className="flex flex-col gap-2 flex-1 min-w-0">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <div className="text-[10px] font-bold uppercase text-slate-500 mb-1">Tier Name</div>
+                            <input
+                              type="text"
+                              value={tier.label}
+                              onChange={(e) => updateTier(i, "label", e.target.value)}
+                              placeholder="e.g. Bronze"
+                              className="border-0 px-3 py-2 text-slate-600 bg-white rounded text-sm shadow focus:outline-none focus:ring w-full"
+                            />
+                          </div>
+                          <div>
+                            <div className="text-[10px] font-bold uppercase text-slate-500 mb-1">Price (LKR)</div>
+                            <input
+                              type="text"
+                              value={tier.price}
+                              onChange={(e) => updateTier(i, "price", e.target.value.replace(/[^0-9.]/g, ""))}
+                              placeholder="e.g. 1500"
+                              className="border-0 px-3 py-2 text-slate-600 bg-white rounded text-sm shadow focus:outline-none focus:ring w-full"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-bold uppercase text-slate-500 mb-1">Description</div>
+                          <input
+                            type="text"
+                            value={tier.description}
+                            onChange={(e) => updateTier(i, "description", e.target.value)}
+                            placeholder="e.g. General admission, basic amenities"
+                            className="border-0 px-3 py-2 text-slate-600 bg-white rounded text-sm shadow focus:outline-none focus:ring w-full"
+                          />
+                        </div>
+                      </div>
+                      {priceTiers.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeTier(i)}
+                          className="mt-1 text-slate-400 hover:text-red-500 transition-colors text-lg leading-none flex-shrink-0"
+                          title="Remove tier"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={addTier}
+                    className="flex items-center gap-2 text-sm font-bold text-sky-600 hover:text-sky-800 transition-colors"
+                  >
+                    <span className="text-xl leading-none">+</span> Add Price Range
+                  </button>
+
+                  <label className="block pt-1">
+                    <div className="mb-2 uppercase text-slate-600 text-xs font-bold">
+                      Start Date & Time <span className="text-slate-400 normal-case">(optional)</span>
+                    </div>
+                    <input
+                      type="datetime-local"
+                      className="border-0 px-3 py-3 text-slate-600 bg-white rounded text-sm shadow focus:outline-none focus:ring w-full ease-linear transition-all duration-150"
+                      value={startDateTime}
+                      onChange={(e) => setStartDateTime(e.target.value)}
+                    />
+                  </label>
+                </div>
+              )}
             </div>
           </Card>
 

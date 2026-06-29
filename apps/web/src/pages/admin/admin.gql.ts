@@ -134,14 +134,19 @@ export const ADMIN_ALL_SUPPORT_TICKETS = gql`
       subject
       message
       status
+      imageUrls
       createdAt
       userEmail
       userDisplayName
+      sourceType
+      sourceId
+      listingId
       replies {
         id
         fromAdmin
         senderUid
         message
+        imageUrls
         createdAt
       }
     }
@@ -178,6 +183,7 @@ export const ADMIN_ALL_LISTINGS = gql`
       type
       category
       price
+      priceTiers { label price description }
       placeName
       startDateTime
       lat

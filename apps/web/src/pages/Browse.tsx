@@ -6,9 +6,11 @@ import { MAPS_LIBRARIES } from "../lib/googleMaps";
 import { DashboardLayout } from "../layouts/DashboardLayout";
 import { Badge } from "../ui/Badge";
 import { ME_QUERY, SEARCH_LISTINGS, NEARBY_LISTINGS_QUERY } from "./browse.gql";
+import { formatListingPriceSummary, listingHasPrice } from "../lib/listingPrice";
 import { useFeatureFlags } from "../auth/useFeatureFlags";
 import { MY_SAVED_LISTINGS, SAVE_LISTING, UNSAVE_LISTING } from "./host/saved.gql";
 import { ALL_HOSTS } from "./hosts.gql";
+import { getHostPublicInitial, getHostPublicName } from "../lib/hostName";
 import { MARK_GOING, UNMARK_GOING, MY_ITINERARY_GOING } from "./going.gql";
 
 const BADGE_EMOJI: Record<string, string> = { DIAMOND: '💎', GOLD: '🥇', SILVER: '🥈', BRONZE: '🥉', NONE: '' };
@@ -33,6 +35,7 @@ type Listing = {
 type HostCard = {
   firebaseUid: string;
   displayName?: string;
+  businessName?: string;
   avatarUrl?: string;
   badgeLevel: string;
   approvedCount: number;
@@ -278,7 +281,7 @@ export function Browse() {
             )}
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {(hostsData?.allHosts ?? []).map((host: HostCard) => {
-                const initials = (host.displayName ?? host.firebaseUid.slice(0, 2)).slice(0, 2).toUpperCase();
+                const initials = getHostPublicInitial(host);
                 return (
                   <div
                     key={host.firebaseUid}
@@ -286,13 +289,13 @@ export function Browse() {
                     onClick={() => nav(`/hosts/${host.firebaseUid}`)}
                   >
                     {host.avatarUrl ? (
-                      <img src={host.avatarUrl} alt={host.displayName ?? "Host"} className="w-16 h-16 rounded-full object-cover" />
+                      <img src={host.avatarUrl} alt={getHostPublicName(host)} className="w-16 h-16 rounded-full object-cover" />
                     ) : (
                       <div className="w-16 h-16 rounded-full bg-brand-100 flex items-center justify-center text-brand-600 font-bold text-xl">
                         {initials}
                       </div>
                     )}
-                    <div className="font-bold text-slate-700">{host.displayName ?? "Host"}</div>
+                    <div className="font-bold text-slate-700">{getHostPublicName(host)}</div>
                     <div className="text-xs text-slate-400">
                       {BADGE_EMOJI[host.badgeLevel]} {host.badgeLevel !== 'NONE' ? host.badgeLevel : ''}
                       {host.approvedCount > 0 && ` · ${host.approvedCount} events`}
@@ -505,7 +508,7 @@ export function Browse() {
                           <div className="text-xs text-slate-400 mb-1">📍 {active.placeName}</div>
                         )}
                         <div className="text-xs font-bold text-brand-600 mb-2">
-                          {active.price ? `LKR ${Number(active.price).toLocaleString()}` : "Free"}
+                          {listingHasPrice(active) ? formatListingPriceSummary(active) : "Free"}
                         </div>
                         <button
                           onClick={() => handleCardClick(active)}
@@ -599,9 +602,9 @@ export function Browse() {
                     </p>
 
                     <div className="flex items-center justify-between">
-                      {listing.price ? (
+                      {listingHasPrice(listing) ? (
                         <span className="text-sm font-bold text-sky-600">
-                          LKR {Number(listing.price).toLocaleString()}
+                          {formatListingPriceSummary(listing)}
                         </span>
                       ) : (
                         <span className="text-xs font-semibold text-emerald-500">Free</span>

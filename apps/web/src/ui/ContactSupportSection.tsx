@@ -4,6 +4,7 @@ import { Button } from "./Button";
 import {
   MY_SUPPORT_TICKETS,
   CREATE_SUPPORT_TICKET,
+  REPLY_TO_SUPPORT_TICKET,
 } from "../pages/host/support.gql";
 
 interface SupportReply {
@@ -11,6 +12,7 @@ interface SupportReply {
   fromAdmin: boolean;
   senderUid: string;
   message: string;
+  imageUrls?: string[];
   createdAt: string;
 }
 
@@ -18,6 +20,7 @@ interface SupportTicket {
   id: string;
   subject: string;
   message: string;
+  imageUrls?: string[];
   status: "OPEN" | "REPLIED" | "CLOSED";
   createdAt: string;
   replies: SupportReply[];
@@ -37,12 +40,29 @@ function formatDate(iso: string) {
   });
 }
 
+function ChatImages({ urls }: { urls?: string[] }) {
+  if (!urls?.length) return null;
+  return (
+    <div className="flex flex-wrap gap-2 mt-2">
+      {urls.map((url) => (
+        <a key={url} href={url} target="_blank" rel="noreferrer">
+          <img src={url} alt="Attachment" className="w-16 h-16 object-cover rounded-lg border border-slate-200" />
+        </a>
+      ))}
+    </div>
+  );
+}
+
 export function ContactSupportSection({ isSuperAdmin }: { isSuperAdmin?: boolean }) {
   if (isSuperAdmin) return null;
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [replyDraft, setReplyDraft] = useState("");
+  const [replyError, setReplyError] = useState("");
+  const [replying, setReplying] = useState(false);
 
   const { data, loading, refetch } = useQuery<{ mySupportTickets: SupportTicket[] }>(
     MY_SUPPORT_TICKETS,
@@ -61,6 +81,8 @@ export function ContactSupportSection({ isSuperAdmin }: { isSuperAdmin?: boolean
     onError: (e) => setError(e.message),
   });
 
+  const [replyToTicket] = useMutation(REPLY_TO_SUPPORT_TICKET);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!subject.trim() || !message.trim()) return;
@@ -68,7 +90,27 @@ export function ContactSupportSection({ isSuperAdmin }: { isSuperAdmin?: boolean
     void submit({ variables: { subject: subject.trim(), message: message.trim() } });
   };
 
+  const handleReply = async (ticketId: string) => {
+    const draft = replyDraft.trim();
+    if (!draft) {
+      setReplyError("Please enter a message.");
+      return;
+    }
+    setReplyError("");
+    setReplying(true);
+    try {
+      await replyToTicket({ variables: { ticketId, message: draft } });
+      setReplyDraft("");
+      await refetch();
+    } catch (e) {
+      setReplyError(e instanceof Error ? e.message : "Failed to send reply.");
+    } finally {
+      setReplying(false);
+    }
+  };
+
   const tickets = data?.mySupportTickets ?? [];
+  const selected = tickets.find((t) => t.id === selectedId) ?? null;
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
@@ -128,57 +170,92 @@ export function ContactSupportSection({ isSuperAdmin }: { isSuperAdmin?: boolean
           <p className="text-xs font-bold text-slate-400 uppercase mb-3">
             Previous Tickets
           </p>
-          <div className="space-y-3">
+          <div className="space-y-2">
             {tickets.map((ticket) => (
-              <div
+              <button
                 key={ticket.id}
-                className="border border-slate-100 rounded-xl p-4 bg-slate-50"
+                type="button"
+                onClick={() => setSelectedId(selectedId === ticket.id ? null : ticket.id)}
+                className={`w-full text-left border rounded-xl px-4 py-3 transition-colors ${
+                  selectedId === ticket.id
+                    ? "border-brand-300 bg-brand-50"
+                    : "border-slate-100 bg-slate-50 hover:bg-slate-100"
+                }`}
               >
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <p className="text-sm font-semibold text-slate-700 leading-tight">
-                    {ticket.subject}
-                  </p>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${STATUS_STYLES[ticket.status] ?? "bg-slate-100 text-slate-500"}`}
-                    >
-                      {ticket.status}
-                    </span>
-                    <span className="text-[10px] text-slate-400">
-                      {formatDate(ticket.createdAt)}
-                    </span>
-                  </div>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-slate-700 truncate">{ticket.subject}</p>
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${STATUS_STYLES[ticket.status] ?? "bg-slate-100 text-slate-500"}`}
+                  >
+                    {ticket.status}
+                  </span>
                 </div>
-
-                <p className="text-xs text-slate-500 leading-relaxed mb-2">
-                  {ticket.message}
+                <p className="text-[10px] text-slate-400 mt-1">
+                  {formatDate(ticket.createdAt)}
+                  {ticket.replies.length > 0 ? ` · ${ticket.replies.length} repl${ticket.replies.length === 1 ? "y" : "ies"}` : ""}
                 </p>
-
-                {ticket.replies.length > 0 && (
-                  <div className="mt-3 space-y-2 border-t border-slate-200 pt-3">
-                    {ticket.replies.map((reply) => (
-                      <div
-                        key={reply.id}
-                        className={`rounded-lg px-3 py-2 text-xs leading-relaxed ${
-                          reply.fromAdmin
-                            ? "bg-brand-50 border border-brand-100 text-brand-800"
-                            : "bg-white border border-slate-200 text-slate-600"
-                        }`}
-                      >
-                        <span className="font-bold mr-1">
-                          {reply.fromAdmin ? "Support:" : "You:"}
-                        </span>
-                        {reply.message}
-                        <span className="ml-2 text-[10px] text-slate-400">
-                          {formatDate(reply.createdAt)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              </button>
             ))}
           </div>
+
+          {selected && (
+            <div className="mt-4 border border-slate-200 rounded-xl p-4 bg-white space-y-3">
+              <p className="text-sm font-bold text-slate-700">{selected.subject}</p>
+
+              <div className="rounded-lg px-3 py-2 text-xs bg-blue-50 border border-blue-100">
+                <span className="font-bold text-blue-600">You: </span>
+                {selected.message !== "(Image attached)" && selected.message}
+                <ChatImages urls={selected.imageUrls} />
+              </div>
+
+              {selected.replies.map((reply) => (
+                <div
+                  key={reply.id}
+                  className={`rounded-lg px-3 py-2 text-xs ${
+                    reply.fromAdmin
+                      ? "bg-brand-50 border border-brand-100 text-brand-800"
+                      : "bg-slate-50 border border-slate-200 text-slate-600"
+                  }`}
+                >
+                  <span className="font-bold mr-1">
+                    {reply.fromAdmin ? "Support:" : "You:"}
+                  </span>
+                  {reply.message !== "(Image attached)" && reply.message}
+                  <ChatImages urls={reply.imageUrls} />
+                  <span className="ml-2 text-[10px] text-slate-400">
+                    {formatDate(reply.createdAt)}
+                  </span>
+                </div>
+              ))}
+
+              {selected.status !== "CLOSED" ? (
+                <div className="border-t border-slate-100 pt-3 space-y-2">
+                  <textarea
+                    className="border border-slate-200 px-3 py-2 placeholder-slate-300 text-slate-600 bg-white rounded text-xs focus:outline-none focus:ring w-full resize-none"
+                    placeholder="Write a reply..."
+                    rows={3}
+                    value={replyDraft}
+                    onChange={(e) => setReplyDraft(e.target.value)}
+                    maxLength={2000}
+                  />
+                  {replyError && (
+                    <p className="text-xs text-red-500 font-semibold">{replyError}</p>
+                  )}
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      disabled={replying || !replyDraft.trim()}
+                      onClick={() => void handleReply(selected.id)}
+                    >
+                      {replying ? "Sending..." : "Send Reply"}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400 italic">This ticket is closed.</p>
+              )}
+            </div>
+          )}
         </div>
       )}
 

@@ -4,13 +4,34 @@ import {
   KeyboardAvoidingView, Platform, StyleSheet, ActivityIndicator,
 } from 'react-native';
 import { Mail, ChevronLeft, CheckCircle } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
-import { sendPasswordResetEmail } from 'firebase/auth';
-import { auth } from '../../src/lib/firebase';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { gqlFetch } from '../../src/hooks/useGraphQL';
+import { FORGOT_PASSWORD } from '../../src/lib/authQueries';
+
+function mapForgotPasswordError(err: unknown): string {
+  const message = err instanceof Error ? err.message : '';
+  const lower = message.toLowerCase();
+
+  if (message.includes('Network error') || lower.includes('fetch')) {
+    return 'Network error. Check your connection and ensure the server is running.';
+  }
+  if (lower.includes('user-not-found') || lower.includes('no account')) {
+    return 'No account found with this email address.';
+  }
+  if (lower.includes('invalid-email')) {
+    return 'Please enter a valid email address.';
+  }
+  if (lower.includes('failed to send') || lower.includes('smtp')) {
+    return 'Failed to send reset email. Please try again later.';
+  }
+  if (message) return message;
+  return 'Failed to send reset email. Please try again.';
+}
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
+  const { email: emailParam } = useLocalSearchParams<{ email?: string }>();
+  const [email, setEmail] = useState(typeof emailParam === 'string' ? emailParam : '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
@@ -31,19 +52,10 @@ export default function ForgotPasswordScreen() {
     setError(null);
     setLoading(true);
     try {
-      await sendPasswordResetEmail(auth!, email.trim());
+      await gqlFetch<{ forgotPassword: boolean }>(FORGOT_PASSWORD, { email: email.trim() });
       setSent(true);
-    } catch (e: any) {
-      const code: string = e?.code ?? '';
-      if (code === 'auth/user-not-found') {
-        setError('No account found with this email address.');
-      } else if (code === 'auth/invalid-email') {
-        setError('Please enter a valid email address.');
-      } else if (code === 'auth/network-request-failed') {
-        setError('Network error. Check your connection.');
-      } else {
-        setError('Failed to send reset email. Please try again.');
-      }
+    } catch (e) {
+      setError(mapForgotPasswordError(e));
     } finally {
       setLoading(false);
     }

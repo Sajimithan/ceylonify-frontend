@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@apollo/client/react";
+import { useSearchParams } from "react-router-dom";
 import { DashboardLayout } from "../../layouts/DashboardLayout";
 import { Card } from "../../ui/Card";
 import { Button } from "../../ui/Button";
@@ -18,6 +19,7 @@ interface SupportReply {
   fromAdmin: boolean;
   senderUid: string;
   message: string;
+  imageUrls?: string[];
   createdAt: string;
 }
 
@@ -25,10 +27,14 @@ interface SupportTicket {
   id: string;
   subject: string;
   message: string;
+  imageUrls?: string[];
   status: SupportStatus;
   createdAt: string;
   userEmail?: string;
   userDisplayName?: string;
+  sourceType?: string;
+  sourceId?: string;
+  listingId?: string;
   replies: SupportReply[];
 }
 
@@ -51,6 +57,19 @@ function formatTime(iso: string) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function ChatImages({ urls }: { urls?: string[] }) {
+  if (!urls?.length) return null;
+  return (
+    <div className="flex flex-wrap gap-2 mt-2">
+      {urls.map((url) => (
+        <a key={url} href={url} target="_blank" rel="noreferrer">
+          <img src={url} alt="Attachment" className="w-20 h-20 object-cover rounded-lg border border-slate-200" />
+        </a>
+      ))}
+    </div>
+  );
 }
 
 function StatusBadge({ status }: { status: SupportStatus }) {
@@ -251,6 +270,11 @@ function TicketDetailModal({
           <div className="flex-1 min-w-0 mr-4">
             <div className="flex items-center gap-2 mb-1 flex-wrap">
               <StatusBadge status={ticket.status} />
+              {ticket.sourceType === "LISTING_REPORT" && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
+                  LISTING REPORT
+                </span>
+              )}
               <span className="text-xs text-slate-400">{formatDate(ticket.createdAt)}</span>
             </div>
             <h2 className="text-base font-bold text-slate-800 leading-tight">
@@ -285,6 +309,7 @@ function TicketDetailModal({
                   <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
                     {ticket.message}
                   </p>
+                  <ChatImages urls={ticket.imageUrls} />
                   <p className="text-[10px] text-slate-400 mt-1.5 text-right">
                     {formatDate(ticket.createdAt)} · {formatTime(ticket.createdAt)}
                   </p>
@@ -314,6 +339,7 @@ function TicketDetailModal({
                     <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
                       {reply.message}
                     </p>
+                    <ChatImages urls={reply.imageUrls} />
                     <p className="text-[10px] text-slate-400 mt-1.5">
                       {formatDate(reply.createdAt)} · {formatTime(reply.createdAt)}
                     </p>
@@ -382,6 +408,8 @@ function TicketDetailModal({
 }
 
 export function AdminSupport() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const openedFromUrl = useRef(false);
   const [filter, setFilter] = useState<"ALL" | SupportStatus>("ALL");
   const [selected, setSelected] = useState<SupportTicket | null>(null);
 
@@ -390,6 +418,31 @@ export function AdminSupport() {
   }>(ADMIN_ALL_SUPPORT_TICKETS, { fetchPolicy: "cache-and-network" });
 
   const tickets = data?.adminAllSupportTickets ?? [];
+
+  useEffect(() => {
+    if (loading || openedFromUrl.current || tickets.length === 0) return;
+
+    const ticketParam = searchParams.get("ticket");
+    const reportParam = searchParams.get("reportId");
+    if (!ticketParam && !reportParam) return;
+
+    let match: SupportTicket | undefined;
+    if (ticketParam) {
+      match = tickets.find((t) => t.id === ticketParam);
+    } else if (reportParam) {
+      match = tickets.find(
+        (t) => t.sourceType === "LISTING_REPORT" && t.sourceId === reportParam,
+      );
+    }
+
+    if (match) {
+      openedFromUrl.current = true;
+      setFilter("ALL");
+      setSelected(match);
+      setSearchParams({}, { replace: true });
+    }
+  }, [loading, tickets, searchParams, setSearchParams]);
+
   const filtered =
     filter === "ALL" ? tickets : tickets.filter((t) => t.status === filter);
 
@@ -459,6 +512,11 @@ export function AdminSupport() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                   <StatusBadge status={ticket.status} />
+                  {ticket.sourceType === "LISTING_REPORT" && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
+                      LISTING REPORT
+                    </span>
+                  )}
                   <span className="text-xs text-slate-400">
                     {formatDate(ticket.createdAt)}
                   </span>

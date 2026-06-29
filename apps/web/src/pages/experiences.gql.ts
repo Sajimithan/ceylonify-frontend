@@ -23,6 +23,29 @@ export const SHARE_EXPERIENCE = gql`
   }
 `;
 
+export const UPDATE_MY_EXPERIENCE = gql`
+  mutation UpdateMyExperience(
+    $id: ID!
+    $rating: Int!
+    $text: String!
+    $imageUrls: [String!]
+  ) {
+    updateMyExperience(
+      id: $id
+      rating: $rating
+      text: $text
+      imageUrls: $imageUrls
+    ) {
+      id
+      listingId
+      rating
+      text
+      imageUrls
+      createdAt
+    }
+  }
+`;
+
 export const DELETE_MY_EXPERIENCE = gql`
   mutation DeleteMyExperience($id: ID!) {
     deleteMyExperience(id: $id)

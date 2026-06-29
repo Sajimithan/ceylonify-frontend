@@ -9,6 +9,7 @@ export const PENDING_LISTINGS = gql`
       type
       category
       price
+      priceTiers { label price description }
       startDateTime
       placeName
       status

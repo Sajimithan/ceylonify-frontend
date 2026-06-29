@@ -210,6 +210,19 @@ export function CreateListing() {
     setErr(null);
     setSuccess(false);
 
+    const tiersForSubmit = priceTiers
+      .filter((t) => t.label.trim() && t.price)
+      .map((t) => ({
+        label: t.label.trim(),
+        price: Number(t.price),
+        description: t.description.trim() || undefined,
+      }));
+
+    if (tieredPricing && tiersForSubmit.length === 0) {
+      setErr("Add at least one price tier with a tier name and price.");
+      return;
+    }
+
     try {
       let finalImageUrl = null;
 
@@ -243,11 +256,7 @@ export function CreateListing() {
             ...(finalImageUrl ? { imageUrl: finalImageUrl } : {}),
             ...(category ? { category } : {}),
             ...(!tieredPricing && price ? { price: Number(price) } : {}),
-            ...(tieredPricing ? {
-              priceTiers: priceTiers
-                .filter((t) => t.label.trim() && t.price)
-                .map((t) => ({ label: t.label.trim(), price: Number(t.price), description: t.description.trim() })),
-            } : {}),
+            ...(tieredPricing && tiersForSubmit.length > 0 ? { priceTiers: tiersForSubmit } : {}),
             ...(startDateTime ? { startDateTime: startDateTime.toISOString() } : {}),
             isPremium,
           },

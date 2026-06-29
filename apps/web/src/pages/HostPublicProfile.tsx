@@ -1,8 +1,10 @@
 import { useParams, useNavigate } from "react-router-dom";
+import { useState } from "react";
 import { useQuery } from "@apollo/client/react";
 import { DashboardLayout } from "../layouts/DashboardLayout";
 import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 import { HOST_PUBLIC_PROFILE } from "./hosts.gql";
+import { getHostPublicInitial, getHostPublicName } from "../lib/hostName";
 
 const BADGE_EMOJI: Record<string, string> = { DIAMOND: "💎", GOLD: "🥇", SILVER: "🥈", BRONZE: "🥉", NONE: "" };
 const BADGE_COLOR: Record<string, string> = {
@@ -33,9 +35,36 @@ type Listing = {
   placeName?: string;
 };
 
+function ExperienceCard({ exp }: { exp: Experience }) {
+  return (
+    <div className="p-4">
+      <div className="flex items-center gap-2 mb-1">
+        {exp.user?.avatarUrl ? (
+          <img src={exp.user.avatarUrl} alt="" className="w-6 h-6 rounded-full object-cover" />
+        ) : (
+          <div className="w-6 h-6 rounded-full bg-brand-100 flex items-center justify-center text-[10px] font-bold text-brand-600">
+            {(exp.user?.displayName ?? "T").slice(0, 1).toUpperCase()}
+          </div>
+        )}
+        <span className="text-xs font-semibold text-slate-600">{exp.user?.displayName ?? "Traveler"}</span>
+        <span className="ml-auto text-amber-400 text-xs">{"⭐".repeat(exp.rating)}</span>
+      </div>
+      <p className="text-sm text-slate-500 leading-relaxed">{exp.text}</p>
+      {exp.imageUrls.length > 0 && (
+        <div className="flex gap-2 mt-2 overflow-x-auto">
+          {exp.imageUrls.map((url, i) => (
+            <img key={i} src={url} alt="" className="h-16 w-16 object-cover rounded-lg flex-shrink-0" />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function HostPublicProfile() {
   const { firebaseUid } = useParams<{ firebaseUid: string }>();
   const nav = useNavigate();
+  const [expandedPastIds, setExpandedPastIds] = useState<Set<string>>(new Set());
 
   const { data, loading, error } = useQuery(HOST_PUBLIC_PROFILE, {
     variables: { firebaseUid },
@@ -50,6 +79,29 @@ export function HostPublicProfile() {
       if (!expByListing.has(exp.listingId)) expByListing.set(exp.listingId, []);
       expByListing.get(exp.listingId)!.push(exp);
     }
+    for (const [listingId, exps] of expByListing) {
+      expByListing.set(
+        listingId,
+        [...exps].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+      );
+    }
+  }
+
+  function togglePastExpanded(listingId: string) {
+    setExpandedPastIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(listingId)) next.delete(listingId);
+      else next.add(listingId);
+      return next;
+    });
+  }
+
+  function handlePastEventOpen(listingId: string, reviewCount: number) {
+    if (reviewCount > 1) {
+      togglePastExpanded(listingId);
+      return;
+    }
+    nav(`/listing/${listingId}`);
   }
 
   return (
@@ -71,14 +123,17 @@ export function HostPublicProfile() {
             {/* Header */}
             <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-5 mb-8">
               {host.avatarUrl ? (
-                <img src={host.avatarUrl} alt={host.displayName} className="w-20 h-20 rounded-full object-cover" />
+                <img src={host.avatarUrl} alt={getHostPublicName(host)} className="w-20 h-20 rounded-full object-cover" />
               ) : (
                 <div className="w-20 h-20 rounded-full bg-brand-100 flex items-center justify-center text-brand-600 font-bold text-3xl">
-                  {(host.displayName ?? host.firebaseUid).slice(0, 2).toUpperCase()}
+                  {getHostPublicInitial(host)}
                 </div>
               )}
               <div className="flex-1">
-                <div className="font-bold text-slate-800 text-xl">{host.displayName ?? "Host"}</div>
+                <div className="font-bold text-slate-800 text-xl">{getHostPublicName(host)}</div>
+                {host.businessName?.trim() && host.displayName?.trim() && host.businessName.trim() !== host.displayName.trim() ? (
+                  <div className="text-sm text-slate-500">{host.displayName}</div>
+                ) : null}
                 <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${BADGE_COLOR[host.badgeLevel]}`}>
                   {BADGE_EMOJI[host.badgeLevel]} {host.badgeLevel !== "NONE" ? host.badgeLevel : "New Host"}
                 </span>
@@ -130,47 +185,45 @@ export function HostPublicProfile() {
                 <div className="space-y-6">
                   {(host.pastEvents as Listing[]).map((l) => {
                     const exps = expByListing.get(l.id) ?? [];
+                    const isExpanded = expandedPastIds.has(l.id);
+                    const previewReview = exps[0];
+                    const hiddenReviews = exps.slice(1);
                     return (
                       <div key={l.id} className="bg-white rounded-xl shadow overflow-hidden">
-                        {/* Listing mini header */}
                         <div
                           className="flex items-center gap-3 p-4 cursor-pointer hover:bg-slate-50 transition-colors border-b border-slate-100"
-                          onClick={() => nav(`/listing/${l.id}`)}
+                          onClick={() => handlePastEventOpen(l.id, exps.length)}
                         >
                           {l.imageUrl && <img src={l.imageUrl} alt={l.title} className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />}
-                          <div>
+                          <div className="flex-1 min-w-0">
                             <div className="font-bold text-slate-700 text-sm">{l.title}</div>
                             {l.startDateTime && <div className="text-[11px] text-slate-400">🗓 {new Date(l.startDateTime).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>}
+                            {exps.length > 1 && (
+                              <div className="text-[11px] text-slate-400 mt-1 italic">
+                                {isExpanded
+                                  ? "Tap to collapse reviews"
+                                  : `+${hiddenReviews.length} more review${hiddenReviews.length === 1 ? "" : "s"} — tap to see all`}
+                              </div>
+                            )}
                           </div>
-                          <div className="ml-auto text-xs text-brand-500 font-semibold">View →</div>
+                          <button
+                            type="button"
+                            className="text-xs text-brand-500 font-semibold shrink-0"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              nav(`/listing/${l.id}`);
+                            }}
+                          >
+                            View →
+                          </button>
                         </div>
-                        {/* Experiences */}
                         {exps.length === 0 ? (
                           <div className="px-4 py-3 text-xs text-slate-400 italic">No experiences shared yet for this event.</div>
                         ) : (
                           <div className="divide-y divide-slate-50">
-                            {exps.map((exp) => (
-                              <div key={exp.id} className="p-4">
-                                <div className="flex items-center gap-2 mb-1">
-                                  {exp.user?.avatarUrl ? (
-                                    <img src={exp.user.avatarUrl} alt="" className="w-6 h-6 rounded-full object-cover" />
-                                  ) : (
-                                    <div className="w-6 h-6 rounded-full bg-brand-100 flex items-center justify-center text-[10px] font-bold text-brand-600">
-                                      {(exp.user?.displayName ?? "T").slice(0, 1).toUpperCase()}
-                                    </div>
-                                  )}
-                                  <span className="text-xs font-semibold text-slate-600">{exp.user?.displayName ?? "Traveler"}</span>
-                                  <span className="ml-auto text-amber-400 text-xs">{"⭐".repeat(exp.rating)}</span>
-                                </div>
-                                <p className="text-sm text-slate-500 leading-relaxed">{exp.text}</p>
-                                {exp.imageUrls.length > 0 && (
-                                  <div className="flex gap-2 mt-2 overflow-x-auto">
-                                    {exp.imageUrls.map((url, i) => (
-                                      <img key={i} src={url} alt="" className="h-16 w-16 object-cover rounded-lg flex-shrink-0" />
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
+                            {previewReview && <ExperienceCard exp={previewReview} />}
+                            {isExpanded && hiddenReviews.map((exp) => (
+                              <ExperienceCard key={exp.id} exp={exp} />
                             ))}
                           </div>
                         )}

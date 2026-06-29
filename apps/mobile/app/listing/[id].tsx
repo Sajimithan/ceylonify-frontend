@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, Image, TouchableOpacity,
-  ActivityIndicator, Linking, StyleSheet, Alert, Modal, TextInput,
+  ActivityIndicator, Linking, StyleSheet, Modal, TextInput,
 } from 'react-native';
+import { useAppAlert } from '../../src/components/AppAlert';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ChevronLeft, Share2, Heart, MapPin, Clock, Tag, Navigation, Cloud, Flag, X as XIcon, Plus } from 'lucide-react-native';
+import { ChevronLeft, Heart, MapPin, Clock, Tag, Navigation, Cloud, Flag, X as XIcon, Plus, Star } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useGraphQL, gqlFetch } from '../../src/hooks/useGraphQL';
 import { WebView } from 'react-native-webview';
+import { auth } from '../../src/lib/firebase';
+import { formatListingPriceSummary, getListingPriceTiers, listingHasPrice } from '../../src/lib/listingPrice';
 
 const API_BASE = (process.env.EXPO_PUBLIC_API_URL ?? 'http://10.0.2.2:3000/graphql').replace('/graphql', '');
 const WEATHER_KEY = process.env.EXPO_PUBLIC_WEATHER_API_KEY;
@@ -20,8 +23,8 @@ function fixImageUrl(url?: string | null): string | null {
 const GET_LISTING_QUERY = `
   query GetListing($id: String!) {
     listing(id: $id) {
-      id title description type category price startDateTime
-      status placeName mapLink imageUrl isPremium viewCount
+      id title description type category price priceTiers { label price description } startDateTime
+      status placeName mapLink imageUrl isPremium viewCount goingCount
       createdAt lat lng
     }
   }
@@ -30,9 +33,22 @@ const GET_LISTING_QUERY = `
 const SAVED_LISTINGS_QUERY = `query SavedListings { savedListings { id } }`;
 const SAVE_MUTATION = `mutation SaveListing($listingId: ID!) { saveListing(listingId: $listingId) }`;
 const UNSAVE_MUTATION = `mutation UnsaveListing($listingId: ID!) { unsaveListing(listingId: $listingId) }`;
-const REPORT_MUTATION = `mutation ReportListing($listingId: ID!, $reason: String!, $comment: String, $imageUrls: [String]) {
+const REPORT_MUTATION = `mutation ReportListing($listingId: ID!, $reason: String!, $comment: String, $imageUrls: [String!]) {
   reportListing(listingId: $listingId, reason: $reason, comment: $comment, imageUrls: $imageUrls)
 }`;
+
+const IS_GOING_QUERY = `query IsGoing($listingId: ID!) { isGoing(listingId: $listingId) }`;
+const MARK_GOING_MUTATION = `mutation MarkGoing($listingId: ID!) { markGoing(listingId: $listingId) { id } }`;
+const UNMARK_GOING_MUTATION = `mutation UnmarkGoing($listingId: ID!) { unmarkGoing(listingId: $listingId) }`;
+
+const LISTING_EXPERIENCES_QUERY = `
+  query ListingExperiences($listingId: ID!) {
+    listingExperiences(listingId: $listingId) {
+      id rating text imageUrls createdAt
+      user { displayName avatarUrl }
+    }
+  }
+`;
 
 const REPORT_SUGGESTIONS = ['Inaccurate information', 'Inappropriate content', 'Scam or fraud', 'Duplicate listing', 'Other'];
 
@@ -100,8 +116,7 @@ function WeatherWidget({ lat, lng }: { lat: number; lng: number }) {
   }, [lat, lng]);
 
   if (!WEATHER_KEY || lat === 0 || lng === 0) return null;
-  if (loading) return null;
-  if (!weather) return null;
+  if (loading || !weather) return null;
 
   const emoji = weather.icon === 'Clear' ? '☀️'
     : weather.icon === 'Clouds' ? '☁️'
@@ -129,19 +144,36 @@ const weatherStyles = StyleSheet.create({
   text: { fontSize: 13, color: '#0B7A79', fontWeight: '600' },
 });
 
+function StarRow({ rating }: { rating: number }) {
+  return (
+    <View style={{ flexDirection: 'row', gap: 2 }}>
+      {[1, 2, 3, 4, 5].map((s) => (
+        <Star key={s} size={13} color={s <= rating ? '#F59E0B' : '#D1D5DB'} fill={s <= rating ? '#F59E0B' : 'none'} />
+      ))}
+    </View>
+  );
+}
+
 export default function ListingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [saved, setSaved] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
+  const { show: showAlert, alertEl } = useAppAlert();
   const [reportVisible, setReportVisible] = useState(false);
   const [reportReason, setReportReason] = useState('');
   const [reportComment, setReportComment] = useState('');
   const [reportImages, setReportImages] = useState<{ uri: string; name: string }[]>([]);
   const [reportSubmitting, setReportSubmitting] = useState(false);
 
-  const { data, loading, error } = useGraphQL<{ listing: any }>(GET_LISTING_QUERY, { id });
+  const [isGoing, setIsGoing] = useState(false);
+  const [goingLoading, setGoingLoading] = useState(false);
+
+  const { data, loading, error } = useGraphQL<{ listing: any }>(GET_LISTING_QUERY, { id }, { pollInterval: 30_000 });
   const { data: savedData } = useGraphQL<{ savedListings: { id: string }[] }>(SAVED_LISTINGS_QUERY);
+  const { data: expData, refetch: refetchExps } = useGraphQL<{ listingExperiences: any[] }>(
+    LISTING_EXPERIENCES_QUERY, { listingId: id }, { pollInterval: 30_000 },
+  );
 
   useEffect(() => {
     if (savedData?.savedListings && id) {
@@ -150,6 +182,13 @@ export default function ListingDetailScreen() {
   }, [savedData, id]);
 
   const listing = data?.listing;
+
+  useEffect(() => {
+    if (!listing || listing.type !== 'EVENT' || !auth?.currentUser) return;
+    gqlFetch<{ isGoing: boolean }>(IS_GOING_QUERY, { listingId: id as string })
+      .then((d) => setIsGoing(d?.isGoing ?? false))
+      .catch(() => {});
+  }, [listing, id]);
 
   async function toggleSave() {
     if (!listing || saveLoading) return;
@@ -169,6 +208,27 @@ export default function ListingDetailScreen() {
     }
   }
 
+  async function handleGoingToggle() {
+    if (!auth?.currentUser) {
+      router.push('/(auth)/login');
+      return;
+    }
+    setGoingLoading(true);
+    try {
+      if (isGoing) {
+        await gqlFetch(UNMARK_GOING_MUTATION, { listingId: id });
+        setIsGoing(false);
+      } else {
+        await gqlFetch(MARK_GOING_MUTATION, { listingId: id });
+        setIsGoing(true);
+      }
+    } catch (e: any) {
+      showAlert({ type: 'error', title: 'Error', message: e.message || 'Could not update going status.' });
+    } finally {
+      setGoingLoading(false);
+    }
+  }
+
   const openInMaps = () => {
     if (!listing) return;
     if (listing.lat && listing.lng && listing.lat !== 0 && listing.lng !== 0) {
@@ -181,7 +241,7 @@ export default function ListingDetailScreen() {
   async function pickReportImage() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission required', 'Allow photo library access to attach evidence.');
+      showAlert({ type: 'warning', title: 'Permission Required', message: 'Allow photo library access to attach evidence.' });
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -197,6 +257,10 @@ export default function ListingDetailScreen() {
 
   async function submitReport() {
     if (!reportReason.trim() || !listing) return;
+    if (!auth.currentUser) {
+      showAlert({ type: 'error', title: 'Sign In Required', message: 'Please sign in to report a listing.' });
+      return;
+    }
     setReportSubmitting(true);
     try {
       const uploadedUrls: string[] = [];
@@ -219,9 +283,14 @@ export default function ListingDetailScreen() {
       setReportReason('');
       setReportComment('');
       setReportImages([]);
-      Alert.alert('Report submitted', 'Thank you. Our team will review this listing.');
-    } catch {
-      Alert.alert('Error', 'Could not submit report. Please try again.');
+      showAlert({
+        type: 'success',
+        title: 'Report Submitted',
+        message: 'Thank you. Our team will review this listing shortly. Track updates in Help Center under Previous Tickets.',
+      });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Could not submit report. Please try again.';
+      showAlert({ type: 'error', title: 'Submission Failed', message });
     } finally {
       setReportSubmitting(false);
     }
@@ -250,9 +319,13 @@ export default function ListingDetailScreen() {
 
   const imageUrl = fixImageUrl(listing.imageUrl);
   const hasLocation = (listing.lat && listing.lng && listing.lat !== 0) || listing.mapLink;
+  const experiences = expData?.listingExperiences ?? [];
+  const isEvent = listing.type === 'EVENT';
+  const isPastEvent = isEvent && listing.startDateTime && new Date(listing.startDateTime) < new Date();
 
   return (
     <View style={styles.container}>
+      {alertEl}
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header Image */}
         <View style={styles.imageContainer}>
@@ -319,14 +392,37 @@ export default function ListingDetailScreen() {
             </View>
           )}
 
-          {listing.price ? (
-            <View style={styles.infoRow}>
-              <Tag size={15} color="#0EA5A4" />
-              <Text style={[styles.infoText, { fontWeight: 'bold', color: '#0EA5A4' }]}>
-                LKR {listing.price}
-              </Text>
+          {isEvent && (listing.goingCount ?? 0) > 0 && (
+            <View style={styles.goingCountRow}>
+              <Text style={styles.goingCountText}>👥 {listing.goingCount} people going</Text>
             </View>
-          ) : null}
+          )}
+
+          {listingHasPrice(listing) && (
+            <View style={styles.priceSection}>
+              <View style={styles.infoRow}>
+                <Tag size={15} color="#0EA5A4" />
+                <Text style={[styles.infoText, styles.priceSectionTitle]}>Price</Text>
+              </View>
+              {getListingPriceTiers(listing).length > 0 ? (
+                <View style={styles.tierList}>
+                  {getListingPriceTiers(listing).map((tier) => (
+                    <View key={tier.label} style={styles.tierRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.tierLabel}>{tier.label}</Text>
+                        {tier.description ? (
+                          <Text style={styles.tierDescription}>{tier.description}</Text>
+                        ) : null}
+                      </View>
+                      <Text style={styles.tierPrice}>LKR {Number(tier.price).toLocaleString()}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <Text style={styles.singlePrice}>{formatListingPriceSummary(listing)}</Text>
+              )}
+            </View>
+          )}
 
           <View style={styles.divider} />
 
@@ -371,7 +467,52 @@ export default function ListingDetailScreen() {
             </>
           )}
 
-          <View style={{ height: 100 }} />
+          {/* Community Experiences */}
+          <View style={styles.divider} />
+          <Text style={styles.sectionTitle}>Community Experiences</Text>
+          {experiences.length === 0 ? (
+            <Text style={styles.noExperiencesText}>No experiences shared yet. Be the first!</Text>
+          ) : (
+            experiences.map((exp: any) => {
+              const expAvatar = fixImageUrl(exp.user?.avatarUrl);
+              return (
+                <View key={exp.id} style={expStyles.card}>
+                  <View style={expStyles.header}>
+                    {expAvatar ? (
+                      <Image source={{ uri: expAvatar }} style={expStyles.avatar} />
+                    ) : (
+                      <View style={expStyles.avatarPlaceholder}>
+                        <Text style={expStyles.avatarInitial}>
+                          {(exp.user?.displayName ?? 'T').charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text style={expStyles.userName}>{exp.user?.displayName ?? 'Traveler'}</Text>
+                      <Text style={expStyles.date}>
+                        {new Date(exp.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </Text>
+                    </View>
+                    <StarRow rating={exp.rating} />
+                  </View>
+                  <Text style={expStyles.text}>{exp.text}</Text>
+                  {(exp.imageUrls ?? []).length > 0 && (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
+                      {exp.imageUrls.map((imgUrl: string, i: number) => (
+                        <Image
+                          key={i}
+                          source={{ uri: fixImageUrl(imgUrl) ?? imgUrl }}
+                          style={expStyles.photo}
+                        />
+                      ))}
+                    </ScrollView>
+                  )}
+                </View>
+              );
+            })
+          )}
+
+          <View style={{ height: 120 }} />
         </View>
       </ScrollView>
 
@@ -380,12 +521,41 @@ export default function ListingDetailScreen() {
         <View style={styles.ctaPrice}>
           <Text style={styles.ctaPriceLabel}>Price</Text>
           <Text style={styles.ctaPriceValue}>
-            {listing.price ? `LKR ${listing.price}` : 'Free'}
+            {listingHasPrice(listing) ? formatListingPriceSummary(listing) : 'Free'}
           </Text>
         </View>
-        <TouchableOpacity style={styles.bookButton}>
-          <Text style={styles.bookButtonText}>Book Now</Text>
-        </TouchableOpacity>
+        {isPastEvent ? (
+          <View style={styles.pastEventBadge}>
+            <Text style={styles.pastEventText}>Event Ended</Text>
+          </View>
+        ) : (
+          <>
+            {isEvent && (
+              <TouchableOpacity
+                onPress={handleGoingToggle}
+                disabled={goingLoading}
+                style={[styles.goingButton, isGoing && styles.goingButtonActive]}
+              >
+                {goingLoading
+                  ? <ActivityIndicator color={isGoing ? '#fff' : '#0EA5A4'} size="small" />
+                  : <Text style={[styles.goingButtonText, isGoing && styles.goingButtonTextActive]}>
+                      {isGoing ? '✓ Going' : "I'm Going"}
+                    </Text>
+                }
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={styles.bookButton}
+              onPress={() => showAlert({
+                type: 'warning',
+                title: 'No Pre-Booking Available',
+                message: 'Pre-booking is not available for this experience. You can purchase your tickets at the gate.',
+              })}
+            >
+              <Text style={styles.bookButtonText}>Book Now</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
 
       {/* Report modal */}
@@ -400,7 +570,6 @@ export default function ListingDetailScreen() {
             </View>
             <Text style={reportStyles.subtitle}>Select a suggestion or describe your reason below.</Text>
 
-            {/* Suggestion chips */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }} contentContainerStyle={{ gap: 8, paddingRight: 4 }}>
               {REPORT_SUGGESTIONS.map((s) => (
                 <TouchableOpacity
@@ -413,7 +582,6 @@ export default function ListingDetailScreen() {
               ))}
             </ScrollView>
 
-            {/* Free-text reason */}
             <TextInput
               style={reportStyles.reasonInput}
               placeholder="Describe your reason… (required)"
@@ -424,7 +592,6 @@ export default function ListingDetailScreen() {
               numberOfLines={2}
             />
 
-            {/* Additional comment */}
             <TextInput
               style={reportStyles.commentInput}
               placeholder="Additional comments (optional)"
@@ -435,7 +602,6 @@ export default function ListingDetailScreen() {
               numberOfLines={3}
             />
 
-            {/* Image attachments */}
             <Text style={reportStyles.photoLabel}>Add Photos (optional)</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
               {reportImages.map((img, i) => (
@@ -469,7 +635,6 @@ export default function ListingDetailScreen() {
               </TouchableOpacity>
             </View>
           </ScrollView>
-          </View>
         </View>
       </Modal>
     </View>
@@ -517,9 +682,29 @@ const styles = StyleSheet.create({
   title: { fontSize: 24, fontWeight: 'bold', color: '#0B1220', marginBottom: 14 },
   infoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   infoText: { marginLeft: 8, fontSize: 14, color: '#374151', flex: 1 },
+  priceSection: { marginBottom: 4 },
+  priceSectionTitle: { fontWeight: 'bold', color: '#64748B', textTransform: 'uppercase', fontSize: 11, letterSpacing: 0.5 },
+  tierList: { marginTop: 8, gap: 8 },
+  tierRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 12,
+  },
+  tierLabel: { fontSize: 14, fontWeight: '700', color: '#334155' },
+  tierDescription: { fontSize: 12, color: '#64748B', marginTop: 2 },
+  tierPrice: { fontSize: 14, fontWeight: '700', color: '#0EA5A4' },
+  singlePrice: { fontSize: 22, fontWeight: 'bold', color: '#0EA5A4', marginTop: 4 },
+  goingCountRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  goingCountText: { fontSize: 13, color: '#059669', fontWeight: '700', backgroundColor: '#ECFDF5', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
   divider: { height: 1, backgroundColor: '#F1F5F9', marginVertical: 18 },
   sectionTitle: { fontSize: 17, fontWeight: 'bold', color: '#0B1220', marginBottom: 10 },
   description: { fontSize: 14, color: '#6B7280', lineHeight: 22 },
+  noExperiencesText: { fontSize: 13, color: '#9CA3AF', fontStyle: 'italic' },
   directionsButton: {
     backgroundColor: '#0EA5A4', flexDirection: 'row', alignItems: 'center',
     justifyContent: 'center', paddingVertical: 14, borderRadius: 14,
@@ -540,15 +725,45 @@ const styles = StyleSheet.create({
   floatingCTA: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 24, paddingVertical: 16, paddingBottom: 28,
+    paddingHorizontal: 16, paddingVertical: 16, paddingBottom: 28, gap: 10,
     borderTopWidth: 1, borderTopColor: '#F1F5F9',
     shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 8,
   },
   ctaPrice: { flex: 1 },
   ctaPriceLabel: { fontSize: 12, color: '#9CA3AF' },
-  ctaPriceValue: { fontSize: 20, fontWeight: 'bold', color: '#0B1220' },
-  bookButton: { backgroundColor: '#0EA5A4', paddingHorizontal: 32, paddingVertical: 14, borderRadius: 999 },
-  bookButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
+  ctaPriceValue: { fontSize: 18, fontWeight: 'bold', color: '#0B1220' },
+  goingButton: {
+    paddingHorizontal: 18, paddingVertical: 13, borderRadius: 999,
+    borderWidth: 2, borderColor: '#0EA5A4', backgroundColor: '#fff',
+  },
+  goingButtonActive: { backgroundColor: '#0EA5A4', borderColor: '#0EA5A4' },
+  goingButtonText: { color: '#0EA5A4', fontWeight: 'bold', fontSize: 14 },
+  goingButtonTextActive: { color: '#fff' },
+  bookButton: { backgroundColor: '#0EA5A4', paddingHorizontal: 24, paddingVertical: 14, borderRadius: 999 },
+  bookButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 15 },
+  pastEventBadge: {
+    backgroundColor: '#F1F5F9', paddingHorizontal: 18, paddingVertical: 13,
+    borderRadius: 999, borderWidth: 1, borderColor: '#E5E7EB',
+  },
+  pastEventText: { color: '#9CA3AF', fontWeight: '600', fontSize: 14 },
+});
+
+const expStyles = StyleSheet.create({
+  card: {
+    backgroundColor: '#F8FAFC', borderRadius: 14, padding: 14,
+    marginBottom: 12, borderWidth: 1, borderColor: '#E5E7EB',
+  },
+  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 10 },
+  avatar: { width: 36, height: 36, borderRadius: 18 },
+  avatarPlaceholder: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: '#0EA5A4', alignItems: 'center', justifyContent: 'center',
+  },
+  avatarInitial: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
+  userName: { fontSize: 13, fontWeight: '700', color: '#0B1220' },
+  date: { fontSize: 11, color: '#9CA3AF', marginTop: 1 },
+  text: { fontSize: 13, color: '#374151', lineHeight: 19 },
+  photo: { width: 80, height: 80, borderRadius: 10, marginRight: 8 },
 });
 
 const reportStyles = StyleSheet.create({

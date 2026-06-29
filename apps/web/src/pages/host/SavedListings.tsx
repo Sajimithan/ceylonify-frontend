@@ -1,6 +1,7 @@
 import { useQuery, useMutation } from "@apollo/client/react";
 import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "../../layouts/DashboardLayout";
+import { formatListingPriceSummary, listingHasPrice } from "../../lib/listingPrice";
 import { Badge } from "../../ui/Badge";
 import { Button } from "../../ui/Button";
 import { MY_SAVED_LISTINGS, UNSAVE_LISTING } from "./saved.gql";
@@ -12,6 +13,7 @@ type Listing = {
   type: string;
   category?: string;
   price?: string;
+  priceTiers?: { label: string; price: number; description?: string | null }[];
   placeName?: string;
   imageUrl?: string;
   createdAt: string;
@@ -102,9 +104,9 @@ export function SavedListings() {
                 </p>
 
                 <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-                  {l.price ? (
+                  {listingHasPrice(l) ? (
                     <span className="text-sm font-bold text-sky-600">
-                      LKR {Number(l.price).toLocaleString()}
+                      {formatListingPriceSummary(l)}
                     </span>
                   ) : (
                     <span className="text-xs font-semibold text-emerald-500">Free</span>

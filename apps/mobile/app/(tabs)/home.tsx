@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  ActivityIndicator, StyleSheet, Image, RefreshControl,
+  ActivityIndicator, StyleSheet, Image, RefreshControl, FlatList,
 } from 'react-native';
-import { Search, MapPin, Bell, CalendarDays } from 'lucide-react-native';
+import { Search, MapPin, Bell, CalendarDays, Users } from 'lucide-react-native';
 import { useGraphQL } from '../../src/hooks/useGraphQL';
 import { useRouter } from 'expo-router';
 import { auth } from '../../src/lib/firebase';
+import { useTheme } from '../../src/context/ThemeContext';
+import { getHostPublicInitial, getHostPublicName } from '../../src/lib/hostName';
+import { formatListingPriceSummary, listingHasPrice } from '../../src/lib/listingPrice';
 
 const API_BASE = (process.env.EXPO_PUBLIC_API_URL ?? 'http://10.0.2.2:3000/graphql').replace('/graphql', '');
 
@@ -19,11 +22,19 @@ const NOTIFICATIONS_QUERY = `query MyNotifications { myNotifications { id read }
 
 const SEARCH_LISTINGS = `
   query SearchListings($category: String, $q: String, $limit: Int) {
-    searchListings(category: $category, q: $q, limit: $limit) {
+    searchListings(category: $category, q: $q, limit: $limit, hidePastEvents: true) {
       listings {
-        id title description type category price placeName startDateTime imageUrl isPremium viewCount goingCount createdAt
+        id title description type category price priceTiers { label price description } placeName startDateTime imageUrl isPremium viewCount goingCount createdAt
       }
       total
+    }
+  }
+`;
+
+const ALL_HOSTS_QUERY = `
+  query AllHosts($limit: Int) {
+    allHosts(limit: $limit) {
+      firebaseUid displayName businessName avatarUrl badgeLevel approvedCount
     }
   }
 `;
@@ -37,12 +48,22 @@ const CATEGORIES = [
   { label: 'Rentals', value: 'RENTAL' },
 ];
 
+const BADGE_ICONS: Record<string, string> = {
+  DIAMOND: '💎',
+  GOLD: '🥇',
+  SILVER: '🥈',
+  BRONZE: '🥉',
+  NONE: '',
+};
+
 export default function HomeScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [displayName, setDisplayName] = useState('Traveler');
+  const [viewMode, setViewMode] = useState<'listings' | 'hosts'>('listings');
 
   useEffect(() => {
     const user = auth?.currentUser;
@@ -59,33 +80,41 @@ export default function HomeScreen() {
 
   const { data, loading, error, refetch } = useGraphQL<{
     searchListings: { listings: any[]; total: number };
-  }>(SEARCH_LISTINGS, variables);
+  }>(viewMode === 'listings' ? SEARCH_LISTINGS : '', variables, { pollInterval: 30_000 });
 
-  const { data: notifData } = useGraphQL<{ myNotifications: { id: string; read: boolean }[] }>(NOTIFICATIONS_QUERY);
+  const { data: hostsData, loading: hostsLoading, refetch: refetchHosts } = useGraphQL<{
+    allHosts: any[];
+  }>(viewMode === 'hosts' ? ALL_HOSTS_QUERY : '', { limit: 40 }, { pollInterval: 30_000 });
+
+  const { data: notifData } = useGraphQL<{ myNotifications: { id: string; read: boolean }[] }>(NOTIFICATIONS_QUERY, undefined, { pollInterval: 30_000 });
   const unreadCount = (notifData?.myNotifications ?? []).filter((n) => !n.read).length;
 
   const listings = data?.searchListings?.listings ?? [];
+  const hosts = hostsData?.allHosts ?? [];
 
   async function onRefresh() {
     setRefreshing(true);
-    await refetch();
+    if (viewMode === 'listings') await refetch();
+    else await refetchHosts();
     setRefreshing(false);
   }
 
-  if (loading && !data) {
+  const isLoading = viewMode === 'listings' ? (loading && !data) : (hostsLoading && !hostsData);
+
+  if (isLoading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#0EA5A4" />
-        <Text style={styles.loadingText}>Loading experiences...</Text>
+      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={[styles.loadingText, { color: colors.textMuted }]}>Loading experiences...</Text>
       </View>
     );
   }
 
-  if (error) {
+  if (viewMode === 'listings' && error) {
     return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorTitle}>Connection Error</Text>
-        <Text style={styles.errorMessage}>{error.message}</Text>
+      <View style={[styles.errorContainer, { backgroundColor: colors.background }]}>
+        <Text style={[styles.errorTitle, { color: colors.text }]}>Connection Error</Text>
+        <Text style={[styles.errorMessage, { color: colors.textMuted }]}>{error.message}</Text>
         <TouchableOpacity onPress={() => refetch()} style={styles.retryButton}>
           <Text style={styles.retryButtonText}>Try Again</Text>
         </TouchableOpacity>
@@ -94,21 +123,21 @@ export default function HomeScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
         <View>
-          <Text style={styles.exploreText}>EXPLORE SRI LANKA</Text>
+          <Text style={[styles.exploreText, { color: colors.primary }]}>EXPLORE SRI LANKA</Text>
           <View style={styles.greetingRow}>
-            <Text style={styles.greetingText}>Ayubowan, {displayName}</Text>
-            <MapPin size={18} color="#0EA5A4" style={{ marginLeft: 8 }} />
+            <Text style={[styles.greetingText, { color: colors.text }]}>Ayubowan, {displayName}</Text>
+            <MapPin size={18} color={colors.primary} style={{ marginLeft: 8 }} />
           </View>
         </View>
         <TouchableOpacity
-          style={styles.notificationButton}
+          style={[styles.notificationButton, { backgroundColor: colors.inputBackground }]}
           onPress={() => router.push('/notifications' as any)}
         >
-          <Bell size={20} color="#0B1220" />
+          <Bell size={20} color={colors.text} />
           {unreadCount > 0 && (
             <View style={styles.notifBadge}>
               <Text style={styles.notifBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
@@ -117,139 +146,225 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* View Mode Toggle */}
+      <View style={[styles.toggleRow, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+        <TouchableOpacity
+          onPress={() => setViewMode('listings')}
+          style={[
+            styles.togglePill,
+            { backgroundColor: colors.inputBackground, borderColor: colors.border },
+            viewMode === 'listings' && styles.togglePillActive,
+          ]}
+        >
+          <Text style={[styles.togglePillText, { color: colors.textMuted }, viewMode === 'listings' && styles.togglePillTextActive]}>
+            Experiences
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => setViewMode('hosts')}
+          style={[
+            styles.togglePill,
+            { backgroundColor: colors.inputBackground, borderColor: colors.border },
+            viewMode === 'hosts' && styles.togglePillActive,
+          ]}
+        >
+          <Users size={13} color={viewMode === 'hosts' ? '#fff' : colors.textMuted} style={{ marginRight: 4 }} />
+          <Text style={[styles.togglePillText, { color: colors.textMuted }, viewMode === 'hosts' && styles.togglePillTextActive]}>
+            Hosts
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         style={styles.scrollView}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5A4" />}
       >
-        {/* Search Bar */}
-        <View style={styles.searchSection}>
-          <View style={styles.searchBar}>
-            <Search size={20} color="#667085" />
-            <TextInput
-              placeholder="Search beaches, temples, events..."
-              style={styles.searchInput}
-              placeholderTextColor="#667085"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Text style={{ color: '#9CA3AF', fontSize: 18, paddingLeft: 8 }}>×</Text>
-              </TouchableOpacity>
+        {viewMode === 'listings' && (
+          <>
+            {/* Search Bar */}
+            <View style={styles.searchSection}>
+              <View style={[styles.searchBar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <Search size={20} color={colors.textMuted} />
+                <TextInput
+                  placeholder="Search beaches, temples, events..."
+                  style={[styles.searchInput, { color: colors.text }]}
+                  placeholderTextColor={colors.textMuted}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchQuery('')}>
+                    <Text style={{ color: '#9CA3AF', fontSize: 18, paddingLeft: 8 }}>×</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+
+            {/* Category Filter */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryList}
+            >
+              {CATEGORIES.map((cat) => {
+                const active = selectedCategory === cat.value;
+                return (
+                  <TouchableOpacity
+                    key={cat.label}
+                    onPress={() => setSelectedCategory(cat.value)}
+                    style={[styles.categoryChip, active && styles.categoryChipActive]}
+                  >
+                    <Text style={[styles.categoryChipText, active && styles.categoryChipTextActive]}>
+                      {cat.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {/* Section title */}
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}> 
+                {listings.length > 0
+                  ? `${listings.length} Experience${listings.length !== 1 ? 's' : ''}`
+                  : 'No Experiences Found'}
+              </Text>
+            </View>
+
+            {listings.length === 0 && !loading && (
+              <View style={[styles.emptyBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <Text style={[styles.emptyText, { color: colors.text }]}>No listings match your search.</Text>
+                <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>Try a different category or search term.</Text>
+              </View>
             )}
-          </View>
-        </View>
 
-        {/* Category Filter */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoryList}
-        >
-          {CATEGORIES.map((cat) => {
-            const active = selectedCategory === cat.value;
-            return (
-              <TouchableOpacity
-                key={cat.label}
-                onPress={() => setSelectedCategory(cat.value)}
-                style={[styles.categoryChip, active && styles.categoryChipActive]}
-              >
-                <Text style={[styles.categoryChipText, active && styles.categoryChipTextActive]}>
-                  {cat.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+            {listings.map((listing: any) => {
+              const imageUrl = fixImageUrl(listing.imageUrl);
+              return (
+                <TouchableOpacity
+                  key={listing.id}
+                  style={[styles.listingCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                  activeOpacity={0.85}
+                  onPress={() => router.push(`/listing/${listing.id}`)}
+                >
+                  {imageUrl ? (
+                    <Image source={{ uri: imageUrl }} style={styles.listingImage} resizeMode="cover" />
+                  ) : (
+                    <View style={styles.listingImagePlaceholder}>
+                      <Text style={styles.listingImagePlaceholderText}>🏝️</Text>
+                    </View>
+                  )}
 
-        {/* Section title */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            {listings.length > 0
-              ? `${listings.length} Experience${listings.length !== 1 ? 's' : ''}`
-              : 'No Experiences Found'}
-          </Text>
-        </View>
+                  {listing.isPremium && (
+                    <View style={styles.premiumBadge}>
+                      <Text style={styles.premiumBadgeText}>PREMIUM</Text>
+                    </View>
+                  )}
 
-        {listings.length === 0 && !loading && (
-          <View style={styles.emptyBox}>
-            <Text style={styles.emptyText}>No listings match your search.</Text>
-            <Text style={styles.emptySubtext}>Try a different category or search term.</Text>
-          </View>
+                  <View style={styles.typeBadge}>
+                    <Text style={styles.typeBadgeText}>{listing.type}</Text>
+                  </View>
+
+                  <View style={styles.listingBody}>
+                    <View style={styles.listingHeader}>
+                      <Text style={[styles.listingTitle, { color: colors.text }]} numberOfLines={1}>{listing.title}</Text>
+                      {listingHasPrice(listing) ? (
+                        <Text style={styles.listingPrice}>{formatListingPriceSummary(listing)}</Text>
+                      ) : (
+                        <Text style={styles.listingPriceFree}>Free</Text>
+                      )}
+                    </View>
+
+                    {listing.placeName && (
+                      <View style={styles.locationRow}>
+                        <MapPin size={13} color="#0EA5A4" />
+                        <Text style={styles.locationText} numberOfLines={1}>{listing.placeName}</Text>
+                      </View>
+                    )}
+                    {listing.startDateTime && (
+                      <View style={styles.locationRow}>
+                        <CalendarDays size={13} color="#94A3B8" />
+                        <Text style={styles.eventDateText} numberOfLines={1}>
+                          {new Date(listing.startDateTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </Text>
+                      </View>
+                    )}
+                    {listing.type === 'EVENT' && (listing.goingCount ?? 0) > 0 && (
+                      <View style={styles.goingRow}>
+                        <Text style={styles.goingText}>👥 {listing.goingCount} going</Text>
+                      </View>
+                    )}
+
+                    <Text style={[styles.listingDescription, { color: colors.textMuted }]} numberOfLines={2}>{listing.description}</Text>
+
+                    <View style={styles.listingFooter}>
+                      {listing.category ? (
+                        <View style={styles.categoryTag}>
+                          <Text style={styles.categoryTagText}>{listing.category}</Text>
+                        </View>
+                      ) : <View />}
+                      <Text style={styles.viewMore}>View Details →</Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </>
         )}
 
-        {listings.map((listing: any) => {
-          const imageUrl = fixImageUrl(listing.imageUrl);
-          return (
-            <TouchableOpacity
-              key={listing.id}
-              style={styles.listingCard}
-              activeOpacity={0.85}
-              onPress={() => router.push(`/listing/${listing.id}`)}
-            >
-              {imageUrl ? (
-                <Image source={{ uri: imageUrl }} style={styles.listingImage} resizeMode="cover" />
-              ) : (
-                <View style={styles.listingImagePlaceholder}>
-                  <Text style={styles.listingImagePlaceholderText}>🏝️</Text>
-                </View>
-              )}
+        {viewMode === 'hosts' && (
+          <>
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}> 
+                {hosts.length > 0 ? `${hosts.length} Host${hosts.length !== 1 ? 's' : ''}` : 'No Hosts Found'}
+              </Text>
+            </View>
 
-              {listing.isPremium && (
-                <View style={styles.premiumBadge}>
-                  <Text style={styles.premiumBadgeText}>PREMIUM</Text>
-                </View>
-              )}
-
-              <View style={styles.typeBadge}>
-                <Text style={styles.typeBadgeText}>{listing.type}</Text>
+            {hostsLoading && !hostsData && (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator color="#0EA5A4" />
               </View>
+            )}
 
-              <View style={styles.listingBody}>
-                <View style={styles.listingHeader}>
-                  <Text style={styles.listingTitle} numberOfLines={1}>{listing.title}</Text>
-                  {listing.price ? (
-                    <Text style={styles.listingPrice}>LKR {listing.price}</Text>
-                  ) : (
-                    <Text style={styles.listingPriceFree}>Free</Text>
-                  )}
-                </View>
-
-                {listing.placeName && (
-                  <View style={styles.locationRow}>
-                    <MapPin size={13} color="#0EA5A4" />
-                    <Text style={styles.locationText} numberOfLines={1}>{listing.placeName}</Text>
-                  </View>
-                )}
-                {listing.startDateTime && (
-                  <View style={styles.locationRow}>
-                    <CalendarDays size={13} color="#94A3B8" />
-                    <Text style={styles.eventDateText} numberOfLines={1}>
-                      {new Date(listing.startDateTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                    </Text>
-                  </View>
-                )}
-                {listing.type === 'EVENT' && (listing.goingCount ?? 0) > 0 && (
-                  <View style={styles.goingRow}>
-                    <Text style={styles.goingText}>👥 {listing.goingCount} going</Text>
-                  </View>
-                )}
-
-                <Text style={styles.listingDescription} numberOfLines={2}>{listing.description}</Text>
-
-                <View style={styles.listingFooter}>
-                  {listing.category ? (
-                    <View style={styles.categoryTag}>
-                      <Text style={styles.categoryTagText}>{listing.category}</Text>
-                    </View>
-                  ) : <View />}
-                  <Text style={styles.viewMore}>View Details →</Text>
-                </View>
+            {hosts.length === 0 && !hostsLoading && (
+              <View style={styles.emptyBox}>
+                <Text style={styles.emptyText}>No hosts yet.</Text>
+                <Text style={styles.emptySubtext}>Check back soon!</Text>
               </View>
-            </TouchableOpacity>
-          );
-        })}
+            )}
+
+            <View style={styles.hostsGrid}>
+              {hosts.map((host: any) => {
+                const avatar = fixImageUrl(host.avatarUrl);
+                const badge = BADGE_ICONS[host.badgeLevel] ?? '';
+                return (
+                  <TouchableOpacity
+                    key={host.firebaseUid}
+                    style={styles.hostCard}
+                    activeOpacity={0.82}
+                    onPress={() => router.push(`/hosts/${host.firebaseUid}` as any)}
+                  >
+                    {avatar ? (
+                      <Image source={{ uri: avatar }} style={styles.hostAvatar} />
+                    ) : (
+                      <View style={styles.hostAvatarPlaceholder}>
+                        <Text style={styles.hostAvatarInitial}>
+                          {getHostPublicInitial(host)}
+                        </Text>
+                      </View>
+                    )}
+                    <Text style={styles.hostName} numberOfLines={1}>{getHostPublicName(host)}</Text>
+                    {badge ? (
+                      <Text style={styles.hostBadge}>{badge} {host.badgeLevel}</Text>
+                    ) : null}
+                    <Text style={styles.hostListings}>{host.approvedCount} listings</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </>
+        )}
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -285,6 +400,18 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: '#FFFFFF',
   },
   notifBadgeText: { color: '#FFFFFF', fontSize: 9, fontWeight: 'bold' },
+  toggleRow: {
+    flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 10,
+    backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E5E7EB', gap: 8,
+  },
+  togglePill: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 7, borderRadius: 999,
+    backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E5E7EB',
+  },
+  togglePillActive: { backgroundColor: '#0EA5A4', borderColor: '#0EA5A4' },
+  togglePillText: { fontSize: 13, fontWeight: '600', color: '#667085' },
+  togglePillTextActive: { color: '#FFFFFF' },
   scrollView: { flex: 1 },
   searchSection: { paddingHorizontal: 16, paddingVertical: 14 },
   searchBar: {
@@ -341,4 +468,21 @@ const styles = StyleSheet.create({
   categoryTag: { backgroundColor: '#F0FDF4', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: '#BBF7D0' },
   categoryTagText: { fontSize: 11, color: '#166534', fontWeight: '600', textTransform: 'capitalize' },
   viewMore: { fontSize: 12, color: '#0EA5A4', fontWeight: '700' },
+  // Host grid
+  hostsGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, gap: 12 },
+  hostCard: {
+    width: '46%', backgroundColor: '#FFFFFF', borderRadius: 16,
+    borderWidth: 1, borderColor: '#E5E7EB', padding: 16,
+    alignItems: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 3,
+  },
+  hostAvatar: { width: 64, height: 64, borderRadius: 32, marginBottom: 10 },
+  hostAvatarPlaceholder: {
+    width: 64, height: 64, borderRadius: 32, marginBottom: 10,
+    backgroundColor: '#0EA5A4', alignItems: 'center', justifyContent: 'center',
+  },
+  hostAvatarInitial: { fontSize: 26, color: '#fff', fontWeight: 'bold' },
+  hostName: { fontSize: 14, fontWeight: '700', color: '#0B1220', marginBottom: 4, textAlign: 'center' },
+  hostBadge: { fontSize: 11, color: '#667085', marginBottom: 2, fontWeight: '600' },
+  hostListings: { fontSize: 11, color: '#9CA3AF' },
 });

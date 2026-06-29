@@ -5,10 +5,11 @@ import { Button } from "../ui/Button";
 import { useAuth } from "../auth/useAuth";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { storage } from "../auth/firebase";
-import { MY_EXPERIENCES, SHARE_EXPERIENCE, DELETE_MY_EXPERIENCE } from "./experiences.gql";
+import { MY_EXPERIENCES, SHARE_EXPERIENCE, UPDATE_MY_EXPERIENCE, DELETE_MY_EXPERIENCE } from "./experiences.gql";
 import { SEARCH_LISTINGS } from "./browse.gql";
 import { TrashIcon, PencilSquareIcon, ShareIcon } from "@heroicons/react/24/outline";
 import { ConfirmModal } from "../ui/ConfirmModal";
+import { ExperienceShareModal } from "../components/ExperienceShareModal";
 
 type Experience = {
   id: string;
@@ -42,50 +43,6 @@ function StarPicker({ value, onChange }: { value: number; onChange: (v: number) 
   );
 }
 
-function ShareModal({
-  listingId,
-  onClose,
-}: {
-  listingId: string;
-  onClose: () => void;
-}) {
-  const url = `${window.location.origin}/listing/${listingId}`;
-  const text = encodeURIComponent(`Check out my experience on Ceylonify! 🌴 ${url}`);
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-7 max-w-sm w-full">
-        <h3 className="font-bold text-slate-700 text-lg mb-4">Share Your Experience</h3>
-        <div className="flex flex-col gap-3">
-          <a
-            href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`}
-            target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold text-sm hover:bg-blue-700 transition-colors"
-          >
-            Facebook
-          </a>
-          <a
-            href={`https://wa.me/?text=${text}`}
-            target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-lg font-semibold text-sm hover:bg-emerald-600 transition-colors"
-          >
-            WhatsApp
-          </a>
-          <a
-            href={`https://www.instagram.com/`}
-            target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-2 px-4 py-2 bg-pink-500 text-white rounded-lg font-semibold text-sm hover:bg-pink-600 transition-colors"
-          >
-            Instagram (copy link)
-          </a>
-        </div>
-        <button onClick={onClose} className="mt-5 w-full py-2 text-sm font-bold text-slate-500 hover:text-slate-700 transition-colors">
-          Close
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function ExperienceModal({
   initial,
   onClose,
@@ -100,12 +57,14 @@ function ExperienceModal({
   const [selectedListing, setSelectedListing] = useState<Listing | null>(null);
   const [rating, setRating] = useState(initial?.rating ?? 5);
   const [text, setText] = useState(initial?.text ?? "");
+  const [existingImageUrls, setExistingImageUrls] = useState<string[]>(initial?.imageUrls ?? []);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [searchListings, { data: searchData }] = useLazyQuery(SEARCH_LISTINGS);
   const [shareExperience] = useMutation(SHARE_EXPERIENCE);
+  const [updateMyExperience] = useMutation(UPDATE_MY_EXPERIENCE);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -115,22 +74,35 @@ function ExperienceModal({
     setUploading(true);
     setError(null);
     try {
-      const imageUrls: string[] = [];
+      const imageUrls: string[] = [...existingImageUrls];
       for (let i = 0; i < imageFiles.length; i++) {
         const storageRef = ref(storage, `experiences/${user.uid}/${Date.now()}_${i}`);
         await uploadBytes(storageRef, imageFiles[i]);
         imageUrls.push(await getDownloadURL(storageRef));
       }
-      const { data, errors } = await shareExperience({
-        variables: {
-          listingId: initial?.listingId ?? selectedListing!.id,
-          rating,
-          text: text.trim(),
-          imageUrls,
-        },
-      });
-      if (errors?.length) throw new Error(errors[0].message);
-      onSaved(data.shareExperience as Experience);
+      if (initial) {
+        const { data, errors } = await updateMyExperience({
+          variables: {
+            id: initial.id,
+            rating,
+            text: text.trim(),
+            imageUrls,
+          },
+        });
+        if (errors?.length) throw new Error(errors[0].message);
+        onSaved(data.updateMyExperience as Experience);
+      } else {
+        const { data, errors } = await shareExperience({
+          variables: {
+            listingId: selectedListing!.id,
+            rating,
+            text: text.trim(),
+            imageUrls,
+          },
+        });
+        if (errors?.length) throw new Error(errors[0].message);
+        onSaved(data.shareExperience as Experience);
+      }
     } catch (err: unknown) {
       setError((err as Error).message ?? "Something went wrong.");
     } finally {
@@ -209,19 +181,37 @@ function ExperienceModal({
         {/* Images */}
         <div className="mb-5">
           <label className="block text-xs font-bold text-slate-500 mb-1">Photos (up to 5)</label>
-          <input
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={(e) => setImageFiles(Array.from(e.target.files ?? []).slice(0, 5))}
-            className="text-xs text-slate-500"
-          />
-          {imageFiles.length > 0 && (
-            <div className="flex gap-2 mt-2">
+          {(existingImageUrls.length > 0 || imageFiles.length > 0) && (
+            <div className="flex gap-2 mt-2 flex-wrap">
+              {existingImageUrls.map((url, i) => (
+                <div key={url} className="relative">
+                  <img src={url} alt="" className="w-12 h-12 object-cover rounded" />
+                  <button
+                    type="button"
+                    onClick={() => setExistingImageUrls((prev) => prev.filter((_, idx) => idx !== i))}
+                    className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-slate-700 text-white text-[10px] leading-none"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
               {imageFiles.map((f, i) => (
                 <img key={i} src={URL.createObjectURL(f)} alt="" className="w-12 h-12 object-cover rounded" />
               ))}
             </div>
+          )}
+          {existingImageUrls.length + imageFiles.length < 5 && (
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(e) => {
+                const next = Array.from(e.target.files ?? []);
+                const remaining = 5 - existingImageUrls.length - imageFiles.length;
+                setImageFiles((prev) => [...prev, ...next.slice(0, remaining)]);
+              }}
+              className="text-xs text-slate-500 mt-2"
+            />
           )}
         </div>
 
@@ -236,7 +226,7 @@ function ExperienceModal({
             disabled={uploading}
             className="flex-1 py-2 rounded-lg bg-brand-500 text-white font-bold text-sm hover:bg-brand-600 disabled:opacity-60 transition-colors"
           >
-            {uploading ? "Saving…" : "Share"}
+            {uploading ? "Saving…" : initial ? "Save Changes" : "Share"}
           </button>
         </div>
       </form>
@@ -267,11 +257,14 @@ export function Experienced() {
         <ExperienceModal
           initial={editingExp}
           onClose={() => { setShowModal(false); setEditingExp(undefined); }}
-          onSaved={(exp) => { handleSaved(); setSharingListingId(exp.listingId); }}
+          onSaved={(exp) => {
+            if (!editingExp) setSharingListingId(exp.listingId);
+            handleSaved();
+          }}
         />
       )}
       {sharingListingId && (
-        <ShareModal listingId={sharingListingId} onClose={() => setSharingListingId(null)} />
+        <ExperienceShareModal listingId={sharingListingId} onClose={() => setSharingListingId(null)} />
       )}
 
       <div className="mx-auto w-full max-w-5xl">

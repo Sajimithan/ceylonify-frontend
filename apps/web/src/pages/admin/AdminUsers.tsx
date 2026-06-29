@@ -493,7 +493,7 @@ export function AdminUsers() {
                               <button
                                 className="text-[10px] font-bold text-red-700 hover:text-red-900 border border-red-300 hover:bg-red-50 px-3 py-1 rounded-lg transition-colors"
                                 title="Permanently delete this account"
-                                onClick={() => { setDeleteTarget(u); setDeleteError(""); }}
+                                onClick={() => setDeleteTarget(u)}
                               >
                                 Delete
                               </button>

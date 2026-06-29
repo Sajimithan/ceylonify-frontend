@@ -47,6 +47,7 @@ export const SEARCH_LISTINGS = gql`
         type
         category
         price
+        priceTiers { label price description }
         placeName
         startDateTime
         imageUrl
@@ -89,6 +90,7 @@ export const RELATED_LISTINGS_QUERY = gql`
       type
       category
       price
+      priceTiers { label price description }
       imageUrl
       isPremium
     }
@@ -104,6 +106,7 @@ export const GET_LISTING_DETAIL = gql`
       type
       category
       price
+      priceTiers { label price description }
       startDateTime
       placeName
       mapLink

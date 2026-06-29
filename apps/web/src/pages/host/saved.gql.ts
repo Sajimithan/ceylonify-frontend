@@ -4,6 +4,7 @@ export const MY_SAVED_LISTINGS = gql`
   query MySavedListings {
     savedListings {
       id title description type category price placeName imageUrl createdAt startDateTime
+      priceTiers { label price description }
     }
   }
 `;

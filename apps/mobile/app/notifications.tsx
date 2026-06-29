@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   ActivityIndicator, RefreshControl,
@@ -6,6 +6,7 @@ import {
 import { ChevronLeft, Bell, Heart, Calendar, Clock } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useGraphQL, gqlFetch } from '../src/hooks/useGraphQL';
+import { useTheme } from '../src/context/ThemeContext';
 
 const MY_NOTIFICATIONS_QUERY = `
   query MyNotifications {
@@ -45,9 +46,11 @@ function NotifIcon({ type }: { type: string }) {
 
 export default function NotificationsScreen() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
+  const themedStyles = useMemo(() => createStyles(colors), [colors]);
   const [refreshing, setRefreshing] = React.useState(false);
 
-  const { data, loading, refetch } = useGraphQL<{ myNotifications: any[] }>(MY_NOTIFICATIONS_QUERY);
+  const { data, loading, refetch } = useGraphQL<{ myNotifications: any[] }>(MY_NOTIFICATIONS_QUERY, undefined, { pollInterval: 30_000 });
   const notifications = data?.myNotifications ?? [];
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -70,16 +73,15 @@ export default function NotificationsScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <ChevronLeft size={24} color="#0B1220" />
+    <View style={themedStyles.container}>
+      <View style={themedStyles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={themedStyles.backBtn}>
+          <ChevronLeft size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Notifications</Text>
+        <Text style={themedStyles.headerTitle}>Notifications</Text>
         {unreadCount > 0 ? (
-          <TouchableOpacity onPress={markAll} style={styles.markAllBtn}>
-            <Text style={styles.markAllText}>Mark all read</Text>
+          <TouchableOpacity onPress={markAll} style={themedStyles.markAllBtn}>
+            <Text style={themedStyles.markAllText}>Mark all read</Text>
           </TouchableOpacity>
         ) : (
           <View style={{ width: 80 }} />
@@ -87,20 +89,20 @@ export default function NotificationsScreen() {
       </View>
 
       {loading && notifications.length === 0 ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#0EA5A4" />
+        <View style={themedStyles.centered}>
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : (
         <ScrollView
-          style={styles.list}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5A4" />}
+          style={themedStyles.list}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
           showsVerticalScrollIndicator={false}
         >
           {notifications.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Bell size={56} color="#E5E7EB" />
-              <Text style={styles.emptyTitle}>All caught up!</Text>
-              <Text style={styles.emptyBody}>
+            <View style={themedStyles.emptyState}>
+              <Bell size={56} color={colors.border} />
+              <Text style={themedStyles.emptyTitle}>All caught up!</Text>
+              <Text style={themedStyles.emptyBody}>
                 Notifications for saved listings, itinerary additions, and event reminders will appear here.
               </Text>
             </View>
@@ -108,21 +110,24 @@ export default function NotificationsScreen() {
             notifications.map((item) => (
               <TouchableOpacity
                 key={item.id}
-                style={[styles.item, !item.read && styles.itemUnread]}
+                style={[
+                  themedStyles.item,
+                  !item.read && { backgroundColor: isDark ? 'rgba(14,165,164,0.08)' : '#F0FFFE' },
+                ]}
                 onPress={() => handleTap(item)}
                 activeOpacity={0.7}
               >
                 <NotifIcon type={item.type} />
-                <View style={styles.itemContent}>
-                  <View style={styles.itemTop}>
-                    <Text style={[styles.itemTitle, !item.read && styles.itemTitleBold]} numberOfLines={1}>
+                <View style={themedStyles.itemContent}>
+                  <View style={themedStyles.itemTop}>
+                    <Text style={[themedStyles.itemTitle, !item.read && themedStyles.itemTitleBold]} numberOfLines={1}>
                       {item.title}
                     </Text>
-                    <Text style={styles.itemTime}>{timeAgo(item.createdAt)}</Text>
+                    <Text style={themedStyles.itemTime}>{timeAgo(item.createdAt)}</Text>
                   </View>
-                  <Text style={styles.itemBody} numberOfLines={2}>{item.body}</Text>
+                  <Text style={themedStyles.itemBody} numberOfLines={2}>{item.body}</Text>
                 </View>
-                {!item.read && <View style={styles.unreadDot} />}
+                {!item.read && <View style={themedStyles.unreadDot} />}
               </TouchableOpacity>
             ))
           )}
@@ -133,43 +138,51 @@ export default function NotificationsScreen() {
   );
 }
 
+function createStyles(colors: ReturnType<typeof useTheme>['colors']) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
+    header: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      paddingHorizontal: 16, paddingTop: 52, paddingBottom: 16,
+      backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border,
+    },
+    backBtn: { padding: 4 },
+    headerTitle: { fontSize: 18, fontWeight: 'bold', color: colors.text },
+    markAllBtn: { paddingHorizontal: 4 },
+    markAllText: { fontSize: 12, fontWeight: '600', color: colors.primary },
+    centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    list: { flex: 1 },
+    emptyState: {
+      alignItems: 'center', justifyContent: 'center',
+      paddingTop: 80, paddingHorizontal: 40,
+    },
+    emptyTitle: { fontSize: 18, fontWeight: 'bold', color: colors.text, marginTop: 16, marginBottom: 8 },
+    emptyBody: { fontSize: 13, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
+    item: {
+      flexDirection: 'row', alignItems: 'flex-start',
+      paddingHorizontal: 16, paddingVertical: 14,
+      backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.divider,
+    },
+    iconBox: {
+      width: 40, height: 40, borderRadius: 12,
+      alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    },
+    itemContent: { flex: 1, marginLeft: 12 },
+    itemTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 3 },
+    itemTitle: { fontSize: 14, color: colors.textMuted, flex: 1, marginRight: 8 },
+    itemTitleBold: { fontWeight: 'bold', color: colors.text },
+    itemTime: { fontSize: 10, color: colors.textMuted, flexShrink: 0 },
+    itemBody: { fontSize: 12, color: colors.textMuted, lineHeight: 18 },
+    unreadDot: {
+      width: 8, height: 8, borderRadius: 999,
+      backgroundColor: colors.primary, marginLeft: 8, marginTop: 4, flexShrink: 0,
+    },
+  });
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F7FAFC' },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingTop: 52, paddingBottom: 16,
-    backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E5E7EB',
-  },
-  backBtn: { padding: 4 },
-  headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#0B1220' },
-  markAllBtn: { paddingHorizontal: 4 },
-  markAllText: { fontSize: 12, fontWeight: '600', color: '#0EA5A4' },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  list: { flex: 1 },
-  emptyState: {
-    alignItems: 'center', justifyContent: 'center',
-    paddingTop: 80, paddingHorizontal: 40,
-  },
-  emptyTitle: { fontSize: 18, fontWeight: 'bold', color: '#374151', marginTop: 16, marginBottom: 8 },
-  emptyBody: { fontSize: 13, color: '#9CA3AF', textAlign: 'center', lineHeight: 20 },
-  item: {
-    flexDirection: 'row', alignItems: 'flex-start',
-    paddingHorizontal: 16, paddingVertical: 14,
-    backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#F1F5F9',
-  },
-  itemUnread: { backgroundColor: '#F0FFFE' },
   iconBox: {
     width: 40, height: 40, borderRadius: 12,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-  },
-  itemContent: { flex: 1, marginLeft: 12 },
-  itemTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 3 },
-  itemTitle: { fontSize: 14, color: '#374151', flex: 1, marginRight: 8 },
-  itemTitleBold: { fontWeight: 'bold', color: '#0B1220' },
-  itemTime: { fontSize: 10, color: '#9CA3AF', flexShrink: 0 },
-  itemBody: { fontSize: 12, color: '#667085', lineHeight: 18 },
-  unreadDot: {
-    width: 8, height: 8, borderRadius: 999,
-    backgroundColor: '#0EA5A4', marginLeft: 8, marginTop: 4, flexShrink: 0,
   },
 });

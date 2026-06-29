@@ -5,6 +5,7 @@ export const ALL_HOSTS = gql`
     allHosts(limit: $limit, offset: $offset) {
       firebaseUid
       displayName
+      businessName
       avatarUrl
       badgeLevel
       approvedCount
@@ -18,6 +19,7 @@ export const HOST_PUBLIC_PROFILE = gql`
     hostPublicProfile(firebaseUid: $firebaseUid) {
       firebaseUid
       displayName
+      businessName
       avatarUrl
       createdAt
       badgeLevel
@@ -64,6 +66,7 @@ export const ADMIN_HOST_DETAIL = gql`
     adminHostDetail(firebaseUid: $firebaseUid) {
       firebaseUid
       displayName
+      businessName
       avatarUrl
       email
       createdAt

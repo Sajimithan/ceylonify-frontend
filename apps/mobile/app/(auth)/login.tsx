@@ -3,6 +3,7 @@ import {
   View, Text, TouchableOpacity, TextInput, ScrollView,
   KeyboardAvoidingView, Platform, StyleSheet, Alert, ActivityIndicator,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Mail, Lock, ChevronLeft } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { signInWithEmailAndPassword } from 'firebase/auth';
@@ -68,7 +69,6 @@ export default function LoginScreen() {
       // Backend unreachable — proceed as TRAVELER
     }
 
-    // FCM token registration — web only (firebase/messaging uses browser APIs not available in React Native)
     if (Platform.OS === 'web') {
       void (async () => {
         try {
@@ -77,23 +77,19 @@ export default function LoginScreen() {
           if (token) {
             await gqlFetch(`mutation RegisterDeviceToken($token: String!) { registerDeviceToken(token: $token) }`, { token });
           }
-        } catch {
-          // permission denied or unsupported — skip
-        }
+        } catch { }
       })();
     } else {
-      // Expo push token registration — native (iOS/Android)
       void (async () => {
         try {
+          const Constants = (await import('expo-constants')).default;
+          if (Constants.appOwnership === 'expo') return;
           const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
           const pushEnabled = await AsyncStorage.getItem('pushNotificationsEnabled');
           if (pushEnabled === 'false') return;
-
           const Notifications = await import('expo-notifications');
           const { status } = await Notifications.requestPermissionsAsync();
           if (status !== 'granted') return;
-
-          const Constants = (await import('expo-constants')).default;
           const projectId = Constants.expoConfig?.extra?.eas?.projectId;
           const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
           if (token) {
@@ -102,9 +98,7 @@ export default function LoginScreen() {
               { token },
             );
           }
-        } catch {
-          // permission denied or unsupported — skip
-        }
+        } catch { }
       })();
     }
 
@@ -114,13 +108,21 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Background */}
+      <Image
+        source={require('../../assets/images/landing_bg.png')}
+        style={styles.bg}
+        contentFit="cover"
+      />
+      <View style={styles.overlay} />
+
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardAvoidingView}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <ChevronLeft size={28} color="#0B1220" />
+            <ChevronLeft size={22} color="#fff" />
           </TouchableOpacity>
 
           <View style={styles.header}>
@@ -130,9 +132,9 @@ export default function LoginScreen() {
 
           <View style={styles.form}>
             <View style={styles.inputGroup}>
-              <Text style={[styles.label, { marginBottom: 8 }]}>Email Address</Text>
+              <Text style={styles.label}>Email Address</Text>
               <View style={styles.inputContainer}>
-                <Mail size={20} color="#667085" />
+                <Mail size={20} color="rgba(255,255,255,0.6)" />
                 <TextInput
                   placeholder="name@example.com"
                   style={styles.input}
@@ -140,7 +142,7 @@ export default function LoginScreen() {
                   autoCapitalize="none"
                   value={email}
                   onChangeText={setEmail}
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor="rgba(255,255,255,0.4)"
                 />
               </View>
             </View>
@@ -148,19 +150,24 @@ export default function LoginScreen() {
             <View style={styles.inputGroup}>
               <View style={styles.passwordLabelRow}>
                 <Text style={styles.label}>Password</Text>
-                <TouchableOpacity onPress={() => router.push('/(auth)/forgot-password')}>
+                <TouchableOpacity
+                  onPress={() => router.push({
+                    pathname: '/(auth)/forgot-password',
+                    params: email.trim() ? { email: email.trim() } : {},
+                  })}
+                >
                   <Text style={styles.forgotLink}>Forgot password?</Text>
                 </TouchableOpacity>
               </View>
               <View style={styles.inputContainer}>
-                <Lock size={20} color="#667085" />
+                <Lock size={20} color="rgba(255,255,255,0.6)" />
                 <TextInput
                   placeholder="••••••••"
                   style={styles.input}
                   secureTextEntry
                   value={password}
                   onChangeText={setPassword}
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor="rgba(255,255,255,0.4)"
                 />
               </View>
             </View>
@@ -182,14 +189,12 @@ export default function LoginScreen() {
               }
             </TouchableOpacity>
 
-            {/* Divider */}
             <View style={styles.dividerContainer}>
               <View style={styles.dividerLine} />
               <Text style={styles.orText}>OR CONTINUE WITH</Text>
               <View style={styles.dividerLine} />
             </View>
 
-            {/* Social / Guest Buttons */}
             <View style={styles.socialContainer}>
               <TouchableOpacity
                 style={styles.socialButton}
@@ -222,53 +227,75 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  container: { flex: 1, backgroundColor: '#0B1220' },
+  bg: { ...StyleSheet.absoluteFillObject },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(11,18,32,0.72)',
+  },
   keyboardAvoidingView: { flex: 1 },
-  scrollContent: { paddingHorizontal: 32, paddingTop: 60, paddingBottom: 40 },
-  backButton: { marginBottom: 32 },
-  header: { marginBottom: 40 },
-  title: { fontSize: 30, fontWeight: '900', color: '#0B1220', marginBottom: 8 },
-  subtitle: { fontSize: 16, color: '#667085', lineHeight: 24 },
+  scrollContent: { paddingHorizontal: 28, paddingTop: 60, paddingBottom: 40 },
+
+  backButton: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 36, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
+  },
+
+  header: { marginBottom: 36 },
+  title: { fontSize: 32, fontWeight: '900', color: '#FFFFFF', marginBottom: 8 },
+  subtitle: { fontSize: 15, color: 'rgba(255,255,255,0.65)', lineHeight: 22 },
+
   form: {},
-  inputGroup: { marginBottom: 24 },
+  inputGroup: { marginBottom: 20 },
   passwordLabelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  label: { fontSize: 14, fontWeight: 'bold', color: '#0B1220', marginLeft: 4 },
-  forgotLink: { fontSize: 12, fontWeight: 'bold', color: '#0EA5A4' },
+  label: { fontSize: 13, fontWeight: '700', color: 'rgba(255,255,255,0.85)', marginLeft: 2, marginBottom: 8, letterSpacing: 0.3 },
+  forgotLink: { fontSize: 12, fontWeight: '700', color: '#0EA5A4' },
+
   inputContainer: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#F7FAFC', borderWidth: 1, borderColor: '#E5E7EB',
-    borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14,
   },
-  input: { flex: 1, marginLeft: 12, fontSize: 16, color: '#0B1220' },
+  input: { flex: 1, marginLeft: 12, fontSize: 16, color: '#FFFFFF' },
+
   errorBox: {
-    backgroundColor: '#FEF2F2', borderRadius: 10,
-    paddingHorizontal: 14, paddingVertical: 10, marginBottom: 16,
+    backgroundColor: 'rgba(220,38,38,0.25)',
+    borderWidth: 1, borderColor: 'rgba(252,165,165,0.4)',
+    borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 16,
   },
-  errorText: { color: '#DC2626', fontSize: 13, fontWeight: '600' },
+  errorText: { color: '#FCA5A5', fontSize: 13, fontWeight: '600' },
+
   signInButton: {
-    backgroundColor: '#0EA5A4', paddingVertical: 16, borderRadius: 999,
-    shadowColor: '#0EA5A4', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2, shadowRadius: 8, elevation: 5,
+    backgroundColor: '#0EA5A4', paddingVertical: 17, borderRadius: 999,
+    shadowColor: '#0EA5A4', shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.5, shadowRadius: 16, elevation: 8,
     marginTop: 8, marginBottom: 32, alignItems: 'center',
   },
   signInButtonDisabled: { opacity: 0.7 },
-  signInText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 18 },
-  registerContainer: { flexDirection: 'row', justifyContent: 'center', marginBottom: 40 },
-  registerText: { color: '#667085', fontSize: 14 },
-  registerLink: { color: '#0EA5A4', fontWeight: 'bold', fontSize: 14 },
-  dividerContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 24 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: '#E5E7EB' },
-  orText: { marginHorizontal: 16, fontSize: 12, fontWeight: 'bold', color: '#667085', textTransform: 'uppercase' },
+  signInText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 17 },
+
+  dividerContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.2)' },
+  orText: { marginHorizontal: 14, fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.45)', letterSpacing: 1 },
+
   socialContainer: { flexDirection: 'row', gap: 12, marginBottom: 32 },
   socialButton: {
-    flex: 1, backgroundColor: '#FFFFFF', paddingVertical: 14, borderRadius: 999,
-    borderWidth: 1, borderColor: '#E5E7EB', flexDirection: 'row',
-    alignItems: 'center', justifyContent: 'center',
+    flex: 1, backgroundColor: 'rgba(255,255,255,0.1)',
+    paddingVertical: 14, borderRadius: 999,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
   },
   googleIconBg: {
     backgroundColor: '#EF4444', width: 20, height: 20, borderRadius: 10,
     alignItems: 'center', justifyContent: 'center', marginRight: 8,
   },
   googleIconText: { color: '#FFFFFF', fontSize: 10, fontWeight: '900' },
-  socialButtonText: { fontWeight: 'bold', color: '#0B1220', fontSize: 14 },
+  socialButtonText: { fontWeight: '700', color: '#FFFFFF', fontSize: 14 },
+
+  registerContainer: { flexDirection: 'row', justifyContent: 'center', marginBottom: 20 },
+  registerText: { color: 'rgba(255,255,255,0.6)', fontSize: 14 },
+  registerLink: { color: '#0EA5A4', fontWeight: 'bold', fontSize: 14 },
 });

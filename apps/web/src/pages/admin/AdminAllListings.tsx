@@ -11,6 +11,7 @@ import { Button } from "../../ui/Button";
 import { Input } from "../../ui/Input";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import { ADMIN_ALL_LISTINGS, ADMIN_ALL_USERS, ADMIN_SUSPEND_LISTING } from "./admin.gql";
+import { formatListingPriceSummary, listingHasPrice } from "../../lib/listingPrice";
 import { APPROVE_LISTING, REJECT_LISTING, AI_REVIEW_LISTING } from "./moderation.gql";
 
 type Listing = {
@@ -178,8 +179,11 @@ function ListingDetailModal({
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-[10px] bg-brand-100 text-brand-700 font-bold px-2 py-0.5 rounded-full uppercase">{listing.type}</span>
               {listing.category && <span className="text-xs text-slate-500 font-semibold uppercase">{listing.category}</span>}
-              {listing.price && <span className="text-xs font-bold text-sky-600">LKR {Number(listing.price).toLocaleString()}</span>}
-              {!listing.price && <span className="text-xs font-semibold text-emerald-500">Free</span>}
+              {listingHasPrice(listing) ? (
+                <span className="text-xs font-bold text-sky-600">{formatListingPriceSummary(listing)}</span>
+              ) : (
+                <span className="text-xs font-semibold text-emerald-500">Free</span>
+              )}
             </div>
             {listing.placeName && <p className="text-sm text-slate-500 mt-2">📍 {listing.placeName}</p>}
             {listing.startDateTime && (

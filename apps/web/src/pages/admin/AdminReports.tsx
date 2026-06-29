@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { gql } from "@apollo/client";
 import { useMutation, useQuery, useLazyQuery } from "@apollo/client/react";
+import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "../../layouts/DashboardLayout";
 import { Card } from "../../ui/Card";
 import { Button } from "../../ui/Button";
@@ -73,12 +74,14 @@ function ReportDetailModal({
   onClose,
   onDismiss,
   onAction,
+  actioning,
 }: {
   report: Report;
   users: UserRecord[];
   onClose: () => void;
   onDismiss: () => void;
   onAction: () => void;
+  actioning?: boolean;
 }) {
   const [fetchListing, { data: listingData, loading: listingLoading }] = useLazyQuery<{ listing: ListingDetail }>(GET_LISTING_DETAIL);
   const [lightboxImg, setLightboxImg] = useState<string | null>(null);
@@ -208,11 +211,11 @@ function ReportDetailModal({
           {/* Actions */}
           {report.status === "PENDING" && (
             <div className="flex gap-3 pt-2 border-t border-slate-100">
-              <Button variant="ghost" className="flex-1" onClick={onDismiss}>
+              <Button variant="ghost" className="flex-1" onClick={onDismiss} disabled={actioning}>
                 Dismiss
               </Button>
-              <Button className="flex-1" onClick={onAction}>
-                Take Action
+              <Button className="flex-1" onClick={onAction} disabled={actioning}>
+                {actioning ? "Opening chat…" : "Take Action"}
               </Button>
             </div>
           )}
@@ -233,13 +236,32 @@ function ReportDetailModal({
 }
 
 export function AdminReports() {
+  const navigate = useNavigate();
   const [filter, setFilter] = useState<"ALL" | "PENDING" | "DISMISSED" | "ACTIONED">("PENDING");
   const [selected, setSelected] = useState<Report | null>(null);
+  const [actioning, setActioning] = useState(false);
 
   const { data, loading, error, refetch } = useQuery<{ adminReports: Report[] }>(ADMIN_REPORTS);
   const { data: usersData } = useQuery<{ adminAllUsers: UserRecord[] }>(ADMIN_ALL_USERS);
   const [dismiss] = useMutation(DISMISS_REPORT, { onCompleted: () => { refetch(); setSelected(null); } });
-  const [action] = useMutation(ACTION_REPORT, { onCompleted: () => { refetch(); setSelected(null); } });
+  const [action] = useMutation<{ adminActionReport: string | null }>(ACTION_REPORT);
+
+  const handleTakeAction = async (report: Report) => {
+    setActioning(true);
+    try {
+      const { data: result } = await action({ variables: { reportId: report.id } });
+      await refetch();
+      setSelected(null);
+      const ticketId = result?.adminActionReport;
+      if (ticketId) {
+        navigate(`/admin/support?ticket=${ticketId}`);
+      } else {
+        navigate(`/admin/support?reportId=${report.id}`);
+      }
+    } finally {
+      setActioning(false);
+    }
+  };
 
   const reports = data?.adminReports ?? [];
   const users = usersData?.adminAllUsers ?? [];
@@ -324,7 +346,8 @@ export function AdminReports() {
           users={users}
           onClose={() => setSelected(null)}
           onDismiss={() => dismiss({ variables: { reportId: selected.id } })}
-          onAction={() => action({ variables: { reportId: selected.id } })}
+          onAction={() => void handleTakeAction(selected)}
+          actioning={actioning}
         />
       )}
     </DashboardLayout>
